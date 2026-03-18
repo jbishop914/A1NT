@@ -520,3 +520,88 @@ Implement the low-hanging fruit map features before moving to P2 modules: addres
 - Census demographic choropleth layers
 
 ---
+
+## Session 6 — March 18, 2026 (P2 Build: Workforce, Inventory, AI Receptionist)
+
+### Goals
+Build all three P2 modules — Employee & Workforce, Inventory & Parts Management, and AI Receptionist & Phone System — with full sample data, completing the operational depth layer of the platform.
+
+### Work Produced
+
+**Sample Data (`src/lib/sample-data-p2.ts`):**
+- 6 employees with detailed profiles: skills, certifications (with expiry tracking), weekly hours, performance ratings, departments, roles, pay rates
+- 12 inventory items across 7 categories (Piping, Fittings, Equipment, Filters, Consumables, Valves, HVAC, Tools) with SKU codes, stock levels, min/max thresholds, unit costs, suppliers, location tracking, monthly usage
+- 5 warehouse/shop locations with per-category value breakdowns
+- 4 purchase orders in various statuses (Pending, Ordered, Partial, Received)
+- 10 call log entries with caller info, AI-detected intent classification, priority levels, duration, status, transcript excerpts, and auto-created actions (work orders, appointments, leads)
+- 6 call routing rules with conditions, destinations, and schedules
+- All data types fully typed with TypeScript interfaces
+
+**Employee & Workforce Module (`/dashboard/workforce`):**
+- 4 KPI cards: Total Employees (6), Active Today (5), Certs Expiring (3), Hours This Week (196)
+- Directory / Time Tracking tab system
+- Directory view: searchable, filterable employee table with:
+  - Avatar initials, name, role, department
+  - Skill badges (HVAC, Plumbing, Electrical, etc.)
+  - Certification count with expiry alerts (amber "alert" badges)
+  - Weekly hours and performance rating (star display)
+  - Action dropdown per row (View, Edit, Assign, View Schedule)
+- Time Tracking view: weekly timesheet grid per employee with daily hours, overtime flagging, and summary row
+- Employee Detail Sheet: slide-out with full profile, contact info, skills & certifications section (with expiry dates and status badges), current week hours, performance history, pay rate, assigned work orders link
+- Department and status filter dropdowns with null-safe handling
+
+**Inventory & Parts Module (`/dashboard/inventory`):**
+- 4 KPI cards: Total SKUs (12), Low/Out of Stock (4), Inventory Value ($4,943.40), Open POs (4)
+- Category value breakdown: horizontal scrollable cards showing value per category (All, Piping, Fittings, Equipment, HVAC, Tools) with icons — acts as quick category filter
+- Inventory / Purchase Orders tab system
+- Inventory view: dense data table with:
+  - SKU (monospace), item name, category badge, stock level (color-coded: green=in stock, amber=low, red=out), min/max thresholds, unit cost, location, supplier, monthly usage, status badge
+  - Action dropdown per row (View, Edit, Reorder, Usage History)
+- Purchase Orders view: PO table with order number, supplier, date, status, item count, total, expected delivery
+- Item Detail Sheet: slide-out with full item info, stock history section, supplier info, reorder point, usage trends, linked work orders
+- Category, status, and location filter dropdowns
+
+**AI Receptionist & Phone System (`/dashboard/ai-receptionist`):**
+- Live Call Banner: green pulsing indicator with caller name, phone number, intent badges (Emergency, Urgent), duration timer, assigned technician — appears at top when active call detected
+- 8 KPI cards across 2 rows:
+  - Row 1: Calls Today (23), Avg Wait (0:08), AI Handled (78%), Missed Rate (4.3%)
+  - Row 2: Leads Captured (4), WOs Created (6), Appointments (3), Avg Duration (3:42)
+- Call Log / Call Routing tab system
+- Call Log view: detailed call table with:
+  - Time (monospace), caller name & phone, AI-detected intent badge (Emergency=red, Service Request=blue, Appointment=purple, Sales Inquiry=emerald, Billing=secondary, General=outline), priority level, duration, status (Active=green pulse, Completed=green check, Voicemail=amber, Missed=red), auto-created actions (WO links, Apt badges, Lead badges)
+  - Action dropdown per row (View Transcript, Listen, Create Work Order, Add to CRM)
+- Call Routing view: routing rules table with rule name, conditions, destination, schedule, active toggle, priority
+- Call Detail Sheet: slide-out with full call info, AI transcript with speaker labels and timestamps, intent classification confidence score, actions taken, caller history
+- Call type and status filter dropdowns
+
+### Cross-Module Integration
+- Workforce → Work Orders: employee assignments link to work order detail
+- Workforce → Scheduling: "View Schedule" action links to scheduling module
+- Inventory → Work Orders: parts used tracked per work order
+- AI Receptionist → Work Orders: auto-created WOs show linked WO number with clickable badge
+- AI Receptionist → Scheduling: auto-created appointments show linked appointment badge
+- AI Receptionist → Clients: leads captured link to Client Intelligence
+
+### Design Consistency
+- All modules follow established patterns: `p-6 space-y-6 max-w-[1400px]` wrapper, KPI card grid, toolbar with search + filters, table + sheet detail
+- Monochrome design system with oklch tokens, color used only for semantic status
+- `font-mono` for all numbers, dates, codes, and currency values
+- All interactive elements have `data-testid` attributes
+- Dark mode verified across all three modules
+- Base UI Select null-safety pattern applied consistently
+
+### Build Verification
+- TypeScript: `npx tsc --noEmit` — clean, zero errors
+- Production build: `npm run build` — all 19 routes compiled and generated successfully
+- Visual QA: Playwright screenshots captured for all 3 modules at 1600×900 viewport
+- Sidebar navigation already wired for all 3 P2 modules from Session 4
+
+### Up Next
+- Build P3 modules: Sales & Marketing, Financial Reporting, Fleet & Equipment, Documents & Knowledge Base
+- Connect to PostgreSQL and migrate from sample data to real database records
+- Begin Infrastructure & Geo Phase 1-2 build (map-first features already partially in place)
+- Role-based dashboard views (field tech mobile view, receptionist view)
+- Drag-and-drop scheduling and work order pipeline
+- Live UniFi Protect camera feed integration
+
+---
