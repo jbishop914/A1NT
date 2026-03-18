@@ -419,3 +419,44 @@ Transform the Command Center from a standard dashboard into an immersive, map-fi
 - Add notification preferences to Settings page
 
 ---
+
+## Session 5 — March 18, 2026 (Map Feature Planning & Roadmap)
+
+### Context
+Map is live and working on the deployed Command Center. Josh is excited about the satellite view with 3D terrain and wants to plan advanced map capabilities: address search for navigating to client sites, 3D object editing (draw shapes and extrude them SketchUp-style), color/material customization, client grouping visualization, and geo data layers for lead generation and marketing intelligence.
+
+### Research Completed
+Deep dive into Mapbox GL JS 3D capabilities and ecosystem:
+
+- **`@mapbox/search-js-react`** — Official React geocoder component. Drop-in address search bar with autocomplete, fly-to-location, and marker placement. Can be combined with internal client directory for a hybrid "search addresses OR clients" bar.
+- **`@mapbox/mapbox-gl-draw`** — Official drawing plugin. Supports rectangles, polygons, lines, freehand, circles with vertex editing. Pairs with the `fill-extrusion` layer type for 3D.
+- **`fill-extrusion` (native Mapbox)** — Built-in layer type that extrudes any GeoJSON polygon to a specified height in meters. Supports per-polygon color, opacity, base height. This IS the SketchUp-style push/pull Josh described — draw a rectangle, set a height, it rises from the ground. No extra library needed.
+- **Threebox / Three.js integration** — For premium features: imported 3D models (glTF, FBX), full material system (textures, reflections, lighting), custom meshes. Uses Mapbox `CustomLayerInterface` to sync Three.js camera with Mapbox camera.
+- **Mapbox Boundaries** — 4M+ boundary polygons (ZIP, county, state, legislative, postal). Paid add-on for territory planning and jurisdiction mapping.
+- **US Census API** — Free demographic data down to block-group level (income, housing age, homeownership, business establishment counts). Overlayable as choropleth layers.
+- **Commercial data APIs** — CoreLogic/ATTOM for property parcels, BuildZoom for permits, weather APIs for seasonal intelligence. Future integration targets.
+
+### Work Produced
+
+**`docs/MAP-FEATURES.md`** — Comprehensive feature roadmap for the Command Center map:
+1. Address Search Bar — geocoder with client directory hybrid search
+2. 3D Object Editing — 7-phase plan from 2D drawing through full 3D model import
+3. Client Grouping & Visualization — clustering, color coding, heat maps, service area polygons
+4. Geo Data Layers — demographic overlays, lead scoring, industry-specific intelligence layers
+5. Implementation matrix: what's native today vs. needs libraries vs. future premium
+6. Use cases mapped to all 10 industry templates (HVAC targeting old homes by ZIP, landscaping targeting large lots, etc.)
+
+### Key Findings
+- The SketchUp-style 3D editing Josh described is natively supported by Mapbox via `fill-extrusion` — no need for heavy external 3D libraries for the core feature
+- Colors and opacity per shape are trivial (native paint properties)
+- Full texture/material support requires Three.js bridge (threebox) — maps to the premium Digital Twin tier already planned in Infrastructure & Geo module
+- Census data is free and powerful for lead generation — income, housing age, business density all available by ZIP/tract
+- The geocoder + client search hybrid will be the most immediately useful feature for day-to-day operations
+
+### Up Next
+- Continue to P2 module development (Employee & Workforce, Inventory & Parts, AI Receptionist)
+- Implement address search bar as first map enhancement (low effort, high impact)
+- Begin 2D drawing tools integration when Infrastructure & Geo Phase 1-2 is scheduled
+- Evaluate Mapbox Boundaries pricing for territory/jurisdiction features
+
+---
