@@ -310,24 +310,66 @@ An in-house website creator that gives every client a professional web presence 
 
 ---
 
+### 15. Import, Onboarding & Automated Reporting
+**Slug:** `import-onboarding` | **Category:** Core Platform | **Overlap:** 10/10 templates
+
+Make switching painless. Get running fast. Stay informed automatically.
+
+**Three Pillars:**
+- **Data Import:** Multi-channel migration (CSV/XLSX, QuickBooks, Xero, ServiceTitan, Jobber, OCR scanning, email parsing, API) with AI field mapping, duplicate detection, relationship inference, and full rollback
+- **Guided Onboarding:** AI-powered setup wizard with step-by-step checklist, role-based tutorials, verification sweeps, practice mode, and certification tracking
+- **Automated Reporting:** Custom report builder with scheduled delivery (email/SMS/in-app), AI executive summaries, pre-built templates per module, and per-role alert matrix configuration
+- Integration: Touches every module — imports data into all, reporting aggregates from all, onboarding configures all
+
+> Full specification: `docs/MODULE-IMPORT-ONBOARDING.md`
+
+---
+
+### 16. AI Agents
+**Slug:** `ai-agents` | **Category:** Core Platform | **Overlap:** 10/10 templates
+
+The defining feature of A1 Integrations. Agents aren't tools — they're employees.
+
+**Tier 1 — Assistant Agents:**
+- Web App Helper: context-aware chat on every page, can answer questions, perform actions, navigate, help with data entry
+- Onboarding Agent: guided setup for new organizations
+- Training Agent: interactive tutorials, certification, best practice coaching
+
+**Tier 2 — Agent Employees:**
+- Literal line items on the employee roster alongside humans
+- Assignable roles: Receptionist, Dispatcher, Inside Sales, Customer Service, Follow-Up Manager, Clerical, Financial Analyst, Tax Prep, Social Media Manager, Content Creator, Lead Generator, Troubleshooting Tech, Systems Planner, MEP Draftsman, Building Code Reviewer, Continuing Ed Instructor, Legal Reviewer, Risk Analyst, Customer Satisfaction Manager, and more
+- Full lifecycle: provision → configure → onboard → deploy → learn → review → tune
+- Performance reviews with automated metrics + supervisor ratings + client feedback
+- Multi-channel communication: phone (VoIP), email, chat, SMS, web forms, voice
+- Real-time data access with role-based permissions, live event stream subscription
+- Layered system prompt architecture: platform → industry → organization → role → personality → live context
+- Agent Marketplace (future): pre-built templates, community sharing, custom builder
+
+> Full specification: `docs/MODULE-AI-AGENTS.md`
+
+---
+
 ## Build Priority
 
-| Priority | Module | Rationale |
-|----------|--------|-----------|
-| P0 | Command Center | The shell — everything else lives inside it |
-| P0 | Client Intelligence | The client directory is foundational; smart features layer on later |
-| P1 | Scheduling & Dispatching | Core operational need for every service business |
-| P1 | Work Orders & Job Tracking | The paper replacement — this is what clients came for |
-| P1 | Invoicing & Payments | Get paid — immediate ROI for clients |
-| P2 | Employee & Workforce | People management, time tracking |
-| P2 | Inventory & Parts | Material tracking, cost awareness |
-| P2 | AI Receptionist | The wow factor — but needs scheduling + work orders built first |
-| P2 | Infrastructure & Geo (Phase 1-2) | Core map engine + client location pins + site drill-down — feeds dispatch and fleet |
-| P3 | Sales & Marketing | Growth engine — feeds from CI |
-| P3 | Financial Reporting | Aggregates data from everything else |
-| P3 | Fleet & Equipment | Valuable but not day-one essential |
-| P3 | Documents & Knowledge Base | Important for onboarding and compliance, builds over time |
-| P3 | Website Builder (Tier 1) | Static marketing sites — builds on existing module data |
-| P4 | Infrastructure & Geo (Phase 3-5) | Incident/compliance tracking, in-house facilities, dispatch layer |
-| P4 | Website Builder (Tier 2-3) | Customer portal + premium SaaS features |
-| P5 | Infrastructure & Geo (Phase 6-7) | 3D Digital Twin + photogrammetry integration |
+| Priority | Module | Rationale | Status |
+|----------|--------|-----------|--------|
+| P0 | Command Center | The shell — everything else lives inside it | ✅ Built |
+| P0 | Client Intelligence | The client directory is foundational; smart features layer on later | ✅ Built |
+| P1 | Scheduling & Dispatching | Core operational need for every service business | ✅ Built |
+| P1 | Work Orders & Job Tracking | The paper replacement — this is what clients came for | ✅ Built |
+| P1 | Invoicing & Payments | Get paid — immediate ROI for clients | ✅ Built |
+| P2 | Employee & Workforce | People management, time tracking | ✅ Built |
+| P2 | Inventory & Parts | Material tracking, cost awareness | ✅ Built |
+| P2 | AI Receptionist | The wow factor — but needs scheduling + work orders built first | ✅ Built |
+| P2 | Infrastructure & Geo (Phase 1-2) | Core map engine + client location pins + site drill-down | ⚡ Partial (search + draw + extrusion) |
+| P3 | Sales & Marketing | Growth engine — feeds from CI | ✅ Built |
+| P3 | Financial Reporting | Aggregates data from everything else | ✅ Built |
+| P3 | Fleet & Equipment | Valuable but not day-one essential | ✅ Built |
+| P3 | Documents & Knowledge Base | Important for onboarding and compliance, builds over time | ✅ Built |
+| P3 | Website Builder (Tier 1) | Static marketing sites — builds on existing module data | Planned |
+| P4 | Import & Onboarding (Phase 1-2) | Data migration + guided setup — critical for customer acquisition | Planned |
+| P4 | AI Agents (Phase 1-2) | Helper agent + basic agent employees — the core differentiator | Planned |
+| P4 | Infrastructure & Geo (Phase 3-5) | Incident/compliance tracking, in-house facilities, dispatch layer | Planned |
+| P4 | Website Builder (Tier 2-3) | Customer portal + premium SaaS features | Planned |
+| P5 | AI Agents (Phase 3-6) | Advanced roles, marketplace, full agent employee ecosystem | Planned |
+| P5 | Infrastructure & Geo (Phase 6-7) | 3D Digital Twin + photogrammetry integration | Planned |

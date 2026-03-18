@@ -686,3 +686,59 @@ Josh confirmed plans for deep hardware integrations:
 - Mobile webapp responsive design pass
 
 ---
+
+## Session 8 — March 18, 2026 (New Module Specs: Import/Onboarding + AI Agents)
+
+### Context
+With all 12 original universal modules built (P0–P3), Josh defined two major new additions to round out the core platform: an Import & Onboarding system to make switching from competitors painless, and an AI Agents framework that represents the defining vision of A1 Integrations.
+
+### Work Produced
+
+**`docs/MODULE-IMPORT-ONBOARDING.md`** — Module 15: Import, Onboarding & Automated Reporting
+Three-pillar module:
+1. **Data Import & Migration:** 9 import channels (file upload, QuickBooks, Xero, Google Sheets, industry CRM connectors, email parsing, OCR document scanning, manual entry, API). 7-step import wizard with AI field mapping, duplicate detection (fuzzy matching), data normalization (USPS address validation, phone formatting, date parsing), relationship inference (auto-link invoices to clients), historical date preservation, incremental sync, and full rollback. Industry-specific import templates for ServiceTitan, Housecall Pro, Jobber, PestPac, ZenMaid, etc.
+2. **Guided Onboarding:** AI onboarding assistant that walks through a 15-step setup checklist, configures the platform per industry template, runs verification sweeps (missing data, unlinked records, incomplete config), produces an "Onboarding Report Card." Includes role-based tutorial paths, practice/sandbox mode, and employee certification tracking.
+3. **Automated Reporting:** Custom report builder with drag-and-drop field selection from any module, scheduled delivery (daily/weekly/monthly via email PDF, SMS summary, or in-app), AI-generated executive summaries, 12 pre-built report templates. Per-role alert matrix (alert type × role × channel × frequency) with quiet hours and priority override.
+
+Data model: ImportJob, ImportMapping, OnboardingProgress, AlertRule, ReportTemplate, ScheduledReport, ReportDelivery.
+Phased build: file upload wizard → QuickBooks/Xero connectors → OCR + custom reports → industry-specific connectors.
+
+**`docs/MODULE-AI-AGENTS.md`** — Module 16: AI Agents
+The core differentiator of the A1 platform. Two tiers:
+
+1. **Tier 1 — Assistant Agents:**
+   - Web App Helper (context-aware chat on every page, can perform actions and navigate)
+   - Onboarding Agent (guided setup, verification sweeps)
+   - Training Agent (interactive tutorials, certification, best practices)
+
+2. **Tier 2 — Agent Employees:**
+   - Appear as literal line items on the employee roster alongside human employees
+   - 22+ assignable roles: Receptionist, Dispatcher, Inside Sales, Customer Service, Follow-Up Manager, Clerical/Data Entry, Financial Analyst, Tax Prep Assistant, Bookkeeper, Social Media Manager, Content Creator, Lead Generator, Advertising Assistant, Troubleshooting Tech, Systems Planner, MEP Draftsman, Building Code Reviewer, Continuing Ed Instructor, Legal Framework Reviewer, Risk/Liability Analyst, Customer Satisfaction Manager, and more
+   - Full employee lifecycle: provision → configure → onboard → deploy → learn → review → tune → promote/demote
+   - Performance review system: automated metrics (task volume, accuracy, response time, escalation rate, resolution rate, client satisfaction) + supervisor ratings (5 categories) + client feedback + peer comparison + improvement tracking
+   - Multi-channel communication: phone (VoIP), email, chat, SMS, web forms, voice
+   - Real-time context system: live data access, event stream subscription, cross-agent coordination, long-term memory, full context window per interaction
+   - 6-layer system prompt architecture: platform → industry → organization → role → personality → live context — all layers update in real time
+   - Security: role-based access (same RBAC as humans), configurable action permissions, spend limits, full audit trail, human-in-the-loop gates, kill switch
+   - Future: Agent Marketplace with pre-built templates, community sharing, custom builder, performance benchmarks
+
+Josh’s vision articulated: "depending on your industry and use case, you could potentially run and operate an entire business solely with our agents on the A1 system. You could leave that feature off, or layer in a handful to work hybrid and enhance your human equity — the choice is yours."
+
+Data model: Agent, AgentRole, AgentPermission, AgentTask, AgentReview, AgentFeedback, AgentMemory, AgentEscalation, AgentMetrics.
+Phased build: helper agent → onboarding + receptionist agents → agent employee framework → additional roles → advanced roles → marketplace.
+
+**Updated `docs/MODULES.md`:**
+- Added Module 15 (Import & Onboarding) and Module 16 (AI Agents) summaries
+- Updated build priority table with status indicators for all completed modules (✅ Built)
+- Import & Onboarding slotted at P4 (Phase 1-2)
+- AI Agents slotted at P4 (Phase 1-2) and P5 (Phase 3-6)
+- Total module count now: 16 universal modules
+
+### Up Next
+- Website Builder (Tier 1) — last remaining P3 item
+- Begin building Import/Onboarding UI pages (import wizard, onboarding checklist, alert matrix, report builder)
+- Begin building AI Agents UI pages (agent roster, agent profile, agent chat panel, performance dashboard)
+- Continue Infrastructure & Geo Phase 1-2 completion
+- Database connection and migration from sample data to real records
+
+---
