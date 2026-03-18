@@ -1,241 +1,391 @@
+"use client";
+
+import { useState } from "react";
+import { CommandMap } from "@/components/command-map";
+import { CameraWidget } from "@/components/camera-widget";
 import {
-  DollarSign,
-  ClipboardList,
-  Users,
-  Receipt,
-  ArrowUpRight,
-  ArrowDownRight,
-  Clock,
   Plus,
   FileText,
-  UserPlus,
-  Phone,
-  TrendingUp,
+  Users,
+  ClipboardList,
+  ArrowUpRight,
+  Clock,
+  DollarSign,
+  Briefcase,
+  UserCheck,
+  Receipt,
+  Video,
+  ChevronDown,
+  ChevronUp,
+  Activity,
+  MapPin,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import Link from "next/link";
 
-const kpiCards = [
+// ─── Sample data ────────────────────────────────────────────────
+
+const kpis = [
   {
-    title: "Revenue (MTD)",
+    label: "Revenue (MTD)",
     value: "$24,580",
     change: "+12.5%",
-    trend: "up" as "up" | "down" | "neutral",
+    trend: "up" as const,
     icon: DollarSign,
   },
   {
-    title: "Active Jobs",
+    label: "Active Jobs",
     value: "18",
     change: "+3",
-    trend: "up" as "up" | "down" | "neutral",
-    icon: ClipboardList,
+    trend: "up" as const,
+    icon: Briefcase,
   },
   {
-    title: "Active Clients",
+    label: "Active Clients",
     value: "142",
     change: "+8",
-    trend: "up" as "up" | "down" | "neutral",
-    icon: Users,
+    trend: "up" as const,
+    icon: UserCheck,
   },
   {
-    title: "Open Invoices",
+    label: "Open Invoices",
     value: "$8,340",
-    change: "6 pending",
-    trend: "neutral" as "up" | "down" | "neutral",
+    sub: "6 pending",
     icon: Receipt,
   },
-];
-
-const quickActions = [
-  { label: "New Work Order", icon: ClipboardList, href: "/dashboard/work-orders" },
-  { label: "New Client", icon: UserPlus, href: "/dashboard/clients" },
-  { label: "New Invoice", icon: FileText, href: "/dashboard/invoicing" },
 ];
 
 const recentActivity = [
   {
     id: 1,
-    action: "Work order completed",
+    type: "work-order",
+    title: "Work order completed",
     detail: "WO-1084 — Water heater install at 742 Evergreen",
     time: "12 min ago",
-    type: "success" as const,
+    dot: "bg-emerald-500",
   },
   {
     id: 2,
-    action: "New client added",
+    type: "client",
+    title: "New client added",
     detail: "Riverside Property Management",
     time: "34 min ago",
-    type: "info" as const,
+    dot: "bg-blue-500",
   },
   {
     id: 3,
-    action: "Invoice sent",
+    type: "invoice",
+    title: "Invoice sent",
     detail: "INV-2091 — $1,240.00 to Martinez Residence",
     time: "1 hr ago",
-    type: "default" as const,
+    dot: "bg-white/40",
   },
   {
     id: 4,
-    action: "Call received",
+    type: "call",
+    title: "Call received",
     detail: "AI receptionist captured lead — emergency drain repair",
     time: "1 hr ago",
-    type: "info" as const,
+    dot: "bg-white/40",
   },
   {
     id: 5,
-    action: "Payment received",
+    type: "payment",
+    title: "Payment received",
     detail: "INV-2088 — $680.00 from Oak Street Apartments",
     time: "2 hr ago",
-    type: "success" as const,
+    dot: "bg-emerald-500",
+  },
+];
+
+const schedule = [
+  {
+    time: "8:00 AM",
+    title: "HVAC inspection",
+    location: "12 Oak Lane",
+    tech: "Mike R.",
+    status: "Completed",
   },
   {
-    id: 6,
-    action: "Work order assigned",
-    detail: "WO-1085 — AC maintenance assigned to Mike R.",
-    time: "3 hr ago",
-    type: "default" as const,
+    time: "9:30 AM",
+    title: "Furnace repair",
+    location: "88 Pine St",
+    tech: "Dave S.",
+    status: "In Progress",
+  },
+  {
+    time: "11:00 AM",
+    title: "Water heater install",
+    location: "742 Evergreen Ter",
+    tech: "Mike R.",
+    status: "Completed",
+  },
+  {
+    time: "1:00 PM",
+    title: "AC maintenance",
+    location: "305 Cedar Ave",
+    tech: "Lisa K.",
+    status: "Scheduled",
+  },
+  {
+    time: "2:30 PM",
+    title: "Pipe leak fix",
+    location: "19 Maple Dr",
+    tech: "Dave S.",
+    status: "Scheduled",
   },
 ];
 
-const todaysSchedule = [
-  { time: "8:00 AM", job: "HVAC inspection — 12 Oak Lane", tech: "Mike R.", status: "Completed" },
-  { time: "9:30 AM", job: "Furnace repair — 88 Pine St", tech: "Dave S.", status: "In Progress" },
-  { time: "11:00 AM", job: "Water heater install — 742 Evergreen", tech: "Mike R.", status: "Completed" },
-  { time: "1:00 PM", job: "AC maintenance — 305 Cedar Ave", tech: "Lisa K.", status: "Scheduled" },
-  { time: "2:30 PM", job: "Pipe leak fix — 19 Maple Dr", tech: "Dave S.", status: "Scheduled" },
-  { time: "4:00 PM", job: "Thermostat install — 67 Birch Rd", tech: "Mike R.", status: "Scheduled" },
+type CamStatus = "online" | "offline" | "recording" | "motion";
+
+const mockCameras: { id: string; name: string; location: string; status: CamStatus; isDoorbell?: boolean }[] = [
+  {
+    id: "cam-front",
+    name: "Front Entrance",
+    location: "Main Building — Door 1",
+    status: "online",
+    isDoorbell: true,
+  },
+  {
+    id: "cam-yard",
+    name: "Equipment Yard",
+    location: "South Lot",
+    status: "recording",
+  },
+  {
+    id: "cam-office",
+    name: "Office",
+    location: "Main Building — Interior",
+    status: "online",
+  },
 ];
 
-export default function CommandCenterPage() {
+// ─── Component ──────────────────────────────────────────────────
+
+export default function CommandCenter() {
+  const [showCameras, setShowCameras] = useState(true);
+  const [showActivity, setShowActivity] = useState(true);
+  const [showSchedule, setShowSchedule] = useState(true);
+
   return (
-    <div className="p-6 space-y-6 max-w-[1400px]">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiCards.map((kpi) => (
-          <Card key={kpi.title} data-testid={`card-kpi-${kpi.title.toLowerCase().replace(/\s+/g, "-")}`}>
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {kpi.title}
-              </CardTitle>
-              <kpi.icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold tracking-tight">{kpi.value}</div>
-              <div className="flex items-center gap-1 mt-1">
-                {kpi.trend === "up" && (
-                  <ArrowUpRight className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                )}
-                {kpi.trend === "down" && (
-                  <ArrowDownRight className="h-3.5 w-3.5 text-red-500" />
-                )}
-                <span className={`text-xs ${
-                  kpi.trend === "up"
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : kpi.trend === "down"
-                    ? "text-red-500"
-                    : "text-muted-foreground"
-                }`}>
-                  {kpi.change}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+    <div className="relative w-full h-screen overflow-hidden">
+      {/* ── Full-bleed satellite map ── */}
+      <CommandMap />
 
-      {/* Quick Actions */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {quickActions.map((action) => (
-          <Button
-            key={action.label}
-            variant="outline"
-            size="sm"
-            render={<Link href={action.href} />}
-            data-testid={`button-${action.label.toLowerCase().replace(/\s+/g, "-")}`}
-          >
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
-            {action.label}
-          </Button>
-        ))}
-      </div>
+      {/* ── Overlay layer ── */}
+      <div className="relative z-10 w-full h-full pointer-events-none">
+        {/* ── Top bar: KPIs ── */}
+        <div className="pointer-events-auto absolute top-0 left-0 right-0 p-3">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 bg-black/50 backdrop-blur-xl rounded-lg border border-white/[0.08] px-3 py-1.5">
+              <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-xs font-medium text-white/80">
+                Old Bishop Farm
+              </span>
+              <span className="text-[10px] text-white/40">
+                500 S Meriden Rd, Cheshire, CT
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-xl rounded-lg border border-white/[0.08] px-3 py-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="text-[10px] font-mono text-white/60">
+                ALL SYSTEMS ONLINE
+              </span>
+            </div>
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Activity Feed — wider column */}
-        <Card className="lg:col-span-3" data-testid="card-activity-feed">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-0">
-            {recentActivity.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start gap-3 py-3 border-b last:border-0"
-                data-testid={`activity-item-${item.id}`}
-              >
-                <div className="mt-0.5">
-                  {item.type === "success" ? (
-                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                  ) : item.type === "info" ? (
-                    <div className="h-2 w-2 rounded-full bg-foreground/40" />
-                  ) : (
-                    <div className="h-2 w-2 rounded-full bg-foreground/20" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-tight">{item.action}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    {item.detail}
-                  </p>
-                </div>
-                <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {item.time}
-                </span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* Today's Schedule — narrower column */}
-        <Card className="lg:col-span-2" data-testid="card-schedule">
-          <CardHeader className="pb-3 flex flex-row items-center justify-between gap-1">
-            <CardTitle className="text-sm font-semibold">Today&apos;s Schedule</CardTitle>
-            <Button variant="ghost" size="sm" render={<Link href="/dashboard/scheduling" />}>
-              View all
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-0">
-            {todaysSchedule.map((slot, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-3 py-2.5 border-b last:border-0"
-                data-testid={`schedule-item-${i}`}
-              >
-                <span className="text-xs text-muted-foreground w-16 shrink-0 pt-0.5 font-mono">
-                  {slot.time}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm leading-tight truncate">{slot.job}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{slot.tech}</p>
-                </div>
-                <Badge
-                  variant={
-                    slot.status === "Completed"
-                      ? "secondary"
-                      : slot.status === "In Progress"
-                      ? "default"
-                      : "outline"
-                  }
-                  className="text-[10px] shrink-0"
+          <div className="grid grid-cols-4 gap-2">
+            {kpis.map((kpi) => {
+              const Icon = kpi.icon;
+              return (
+                <div
+                  key={kpi.label}
+                  className="bg-black/50 backdrop-blur-xl rounded-lg border border-white/[0.08] p-3 hover:bg-black/60 transition-colors cursor-default"
                 >
-                  {slot.status}
-                </Badge>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] uppercase tracking-wider text-white/40">
+                      {kpi.label}
+                    </span>
+                    <Icon className="w-3.5 h-3.5 text-white/20" />
+                  </div>
+                  <p className="text-xl font-semibold text-white font-mono">
+                    {kpi.value}
+                  </p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {kpi.change && (
+                      <>
+                        <ArrowUpRight className="w-3 h-3 text-emerald-400" />
+                        <span className="text-[10px] text-emerald-400">
+                          {kpi.change}
+                        </span>
+                      </>
+                    )}
+                    {kpi.sub && (
+                      <span className="text-[10px] text-white/40">{kpi.sub}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Quick actions (floating, below KPIs) ── */}
+        <div className="pointer-events-auto absolute top-[140px] left-3">
+          <div className="flex gap-1.5">
+            {[
+              { icon: ClipboardList, label: "New Work Order" },
+              { icon: Users, label: "New Client" },
+              { icon: FileText, label: "New Invoice" },
+            ].map((action) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.label}
+                  className="flex items-center gap-1.5 bg-black/40 backdrop-blur-xl rounded-md border border-white/[0.08] px-2.5 py-1.5 text-xs text-white/60 hover:text-white hover:bg-black/60 transition-all"
+                  data-testid={`action-${action.label.toLowerCase().replace(/\s/g, "-")}`}
+                >
+                  <Plus className="w-3 h-3" />
+                  <Icon className="w-3 h-3" />
+                  <span>{action.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Right column: Activity + Schedule panels ── */}
+        <div className="pointer-events-auto absolute top-[140px] right-3 bottom-3 w-[340px] flex flex-col gap-2 overflow-hidden">
+          {/* Recent Activity */}
+          <div className="bg-black/50 backdrop-blur-xl rounded-lg border border-white/[0.08] flex flex-col overflow-hidden">
+            <button
+              onClick={() => setShowActivity(!showActivity)}
+              className="flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Activity className="w-3.5 h-3.5 text-white/40" />
+                <span className="text-xs font-medium text-white/70">
+                  Recent Activity
+                </span>
               </div>
-            ))}
-          </CardContent>
-        </Card>
+              {showActivity ? (
+                <ChevronUp className="w-3.5 h-3.5 text-white/30" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-white/30" />
+              )}
+            </button>
+            {showActivity && (
+              <div className="px-3 pb-3 space-y-2.5 max-h-[240px] overflow-y-auto scrollbar-none">
+                {recentActivity.map((item) => (
+                  <div key={item.id} className="flex items-start gap-2.5">
+                    <div
+                      className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${item.dot}`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-white/80">
+                        {item.title}
+                      </p>
+                      <p className="text-[10px] text-white/40 truncate">
+                        {item.detail}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Clock className="w-2.5 h-2.5 text-white/20" />
+                      <span className="text-[10px] text-white/30 whitespace-nowrap">
+                        {item.time}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Today's Schedule */}
+          <div className="bg-black/50 backdrop-blur-xl rounded-lg border border-white/[0.08] flex flex-col overflow-hidden flex-1">
+            <button
+              onClick={() => setShowSchedule(!showSchedule)}
+              className="flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-white/40" />
+                <span className="text-xs font-medium text-white/70">
+                  Today&apos;s Schedule
+                </span>
+              </div>
+              {showSchedule ? (
+                <ChevronUp className="w-3.5 h-3.5 text-white/30" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-white/30" />
+              )}
+            </button>
+            {showSchedule && (
+              <div className="px-3 pb-3 space-y-2 overflow-y-auto scrollbar-none flex-1">
+                {schedule.map((item, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 py-1.5 border-b border-white/[0.04] last:border-0"
+                  >
+                    <span className="text-[10px] font-mono text-white/40 w-14 shrink-0">
+                      {item.time}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-white/80 truncate">
+                        {item.title} — {item.location}
+                      </p>
+                      <p className="text-[10px] text-white/40">{item.tech}</p>
+                    </div>
+                    <span
+                      className={`
+                        text-[9px] font-medium px-1.5 py-0.5 rounded-full shrink-0
+                        ${
+                          item.status === "Completed"
+                            ? "bg-white/10 text-white/50"
+                            : item.status === "In Progress"
+                              ? "bg-emerald-500/20 text-emerald-400"
+                              : "bg-white/[0.06] text-white/40"
+                        }
+                      `}
+                    >
+                      {item.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Bottom-left: Camera feeds ── */}
+        <div className="pointer-events-auto absolute bottom-3 left-3">
+          <button
+            onClick={() => setShowCameras(!showCameras)}
+            className="flex items-center gap-1.5 bg-black/50 backdrop-blur-xl rounded-md border border-white/[0.08] px-2.5 py-1.5 text-xs text-white/60 hover:text-white hover:bg-black/60 transition-all mb-2"
+          >
+            <Video className="w-3.5 h-3.5" />
+            <span>Cameras</span>
+            <span className="text-[10px] text-emerald-400 ml-1">
+              {mockCameras.filter((c) => c.status !== "offline").length}/
+              {mockCameras.length}
+            </span>
+            {showCameras ? (
+              <ChevronDown className="w-3 h-3 text-white/30 ml-1" />
+            ) : (
+              <ChevronUp className="w-3 h-3 text-white/30 ml-1" />
+            )}
+          </button>
+
+          {showCameras && (
+            <div className="flex gap-2">
+              {mockCameras.map((cam) => (
+                <CameraWidget
+                  key={cam.id}
+                  {...cam}
+                  compact
+                  onClose={() => {}}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

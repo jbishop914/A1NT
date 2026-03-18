@@ -369,3 +369,53 @@ After pushing the P1 module build, Vercel deployment failed with multiple TypeSc
 - Begin Infrastructure & Geo Phase 1
 
 ---
+
+## Session 4 — March 18, 2026 (Command Center Visual Overhaul)
+
+### Goals
+Transform the Command Center from a standard dashboard into an immersive, map-first command interface. Full-bleed satellite map background, floating glass overlay widgets, redesigned sidebar, security camera feeds, and UniFi Protect integration scaffold.
+
+### Design Decisions
+- **Full-bleed map:** Satellite imagery with 3D terrain spans the entire viewport edge-to-edge, no borders or partitions
+- **Glass overlays:** All widgets (KPIs, activity feed, schedule, cameras) float on top of the map with `bg-black/50 backdrop-blur-xl` treatment
+- **Dual map providers:** Mapbox GL JS as primary (satellite-streets-v12 style with 3D terrain), Google Maps 3D Tiles as secondary/fallback
+- **Sidebar redesign:** Minimized to icons only (w-14) by default, expands to full width on click. Notification dot system with blue→yellow→orange→red spectrum. Quick links flyout on hover in collapsed state. Section dividers with aggregate notification indicators.
+- **Business branding:** Sidebar header shows client business name ("Old Bishop Farm") with "Powered by A1 Integrations" subtitle. Platform logo moved to subtle branding.
+- **Camera widgets:** Compact floating feeds with status indicators (Live/Recording/Motion/Offline), door access controls for doorbell cameras, mute/expand toggles, scan-line mock feed aesthetic
+
+### Work Produced
+
+**New Components:**
+- `src/components/command-map.tsx` — Full-bleed satellite map with Mapbox GL JS (3D terrain, satellite-streets hybrid, HQ marker with popup) and Google Maps fallback. Graceful degradation when API keys not set.
+- `src/components/camera-widget.tsx` — Security camera feed widget with mock feeds, status indicators, door access controls, expand/collapse, mute toggle. CameraGrid wrapper for multiple feeds.
+- `src/components/app-sidebar.tsx` — Complete rewrite: icon-minimized default state, expandable with business name, 4 section groups (Core/Operations/Management/Growth), notification dot system (blue→red spectrum), quick links flyout tooltips, notification count badges.
+
+**New Libraries:**
+- `src/lib/unifi-protect.ts` — Full UniFi Protect API client scaffold: authentication, camera listing, RTSP/snapshot/web stream URLs, door unlock control, event polling, WebSocket event subscription. Ready to connect to live NVR.
+
+**Modified Files:**
+- `src/app/dashboard/layout.tsx` — Stripped old SidebarProvider/SidebarInset. New layout: dark bg-neutral-950, fixed sidebar + offset main content.
+- `src/app/dashboard/page.tsx` — Complete rewrite: full-bleed CommandMap, floating KPI cards, quick action buttons, collapsible Recent Activity panel, collapsible Today's Schedule panel, camera feed toggle with CameraWidget instances.
+- `src/app/globals.css` — Added scrollbar-none utility class.
+- `package.json` — Added mapbox-gl, @types/mapbox-gl, @types/google.maps
+
+**Environment Variables (to set on Vercel):**
+- `NEXT_PUBLIC_MAPBOX_TOKEN` — Mapbox access token for satellite map
+- `NEXT_PUBLIC_GOOGLE_MAPS_KEY` — Google Maps API key (fallback)
+- `UNIFI_PROTECT_HOST` — UniFi NVR hostname (future)
+- `UNIFI_PROTECT_USERNAME` / `UNIFI_PROTECT_PASSWORD` — NVR auth (future)
+
+### Demo Configuration
+- HQ Address: 500 S Meriden Rd, Cheshire, CT 06410 (Old Bishop Farm)
+- Map center: 41.4989, -72.8685
+- Default view: 60° pitch, -30° bearing, zoom 17
+
+### Up Next
+- Add Mapbox token to Vercel environment variables to activate satellite map
+- Add Google Maps API key for 3D Tiles fallback
+- Connect live UniFi Protect camera feeds
+- Continue P2 module development (Employee & Workforce, Inventory, AI Receptionist)
+- Build section "mini landing pages" for sidebar section icons
+- Add notification preferences to Settings page
+
+---
