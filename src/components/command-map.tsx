@@ -30,19 +30,23 @@ export function CommandMap({
 }: CommandMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!mapContainer.current) return;
 
-    if (provider === "mapbox") {
-      initMapbox();
-    } else {
-      initGoogle();
-    }
+    // Small delay to ensure container has dimensions
+    const timer = setTimeout(() => {
+      if (provider === "mapbox") {
+        initMapbox();
+      } else {
+        initGoogle();
+      }
+    }, 100);
 
     return () => {
+      clearTimeout(timer);
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -55,16 +59,39 @@ export function CommandMap({
     try {
       const mapboxgl = (await import("mapbox-gl")).default;
 
+      // NEXT_PUBLIC_ vars are inlined at build time by Next.js
       const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-      if (!token) {
-        setError("NEXT_PUBLIC_MAPBOX_TOKEN not set — using fallback view");
+
+      if (!token || token.trim() === "") {
+        console.warn("[CommandMap] NEXT_PUBLIC_MAPBOX_TOKEN is empty. Value:", JSON.stringify(token));
+        console.warn("[CommandMap] Note: NEXT_PUBLIC_ env vars are baked in at BUILD time. If you added the token after building, you need to redeploy.");
+        setError("Mapbox token not available — redeploy after setting NEXT_PUBLIC_MAPBOX_TOKEN");
+        setStatus("error");
         return;
       }
 
+      console.log("[CommandMap] Initializing Mapbox with token:", token.substring(0, 10) + "...");
+
       mapboxgl.accessToken = token;
 
+      const container = mapContainer.current;
+      if (!container) {
+        setError("Map container not found");
+        setStatus("error");
+        return;
+      }
+
+      // Ensure container has dimensions
+      const rect = container.getBoundingClientRect();
+      console.log("[CommandMap] Container dimensions:", rect.width, "x", rect.height);
+      if (rect.width === 0 || rect.height === 0) {
+        console.warn("[CommandMap] Container has zero dimensions, retrying...");
+        setTimeout(() => initMapbox(), 500);
+        return;
+      }
+
       const map = new mapboxgl.Map({
-        container: mapContainer.current!,
+        container,
         style: "mapbox://styles/mapbox/satellite-streets-v12",
         center: [center.lng, center.lat],
         zoom,
@@ -74,7 +101,9 @@ export function CommandMap({
         interactive: true,
       });
 
-      map.on("style.load", () => {
+      map.on("load", () => {
+        console.log("[CommandMap] Map loaded successfully");
+
         // Enable 3D terrain
         map.addSource("mapbox-dem", {
           type: "raster-dem",
@@ -109,10 +138,19 @@ export function CommandMap({
           )
           .addTo(map);
 
-        setMapLoaded(true);
+        setStatus("ready");
       });
 
-      // Navigation controls (small, positioned bottom-right to not conflict with overlays)
+      map.on("error", (e) => {
+        console.error("[CommandMap] Mapbox error:", e.error?.message || e);
+        // Don't override status if map already loaded — some tile errors are non-fatal
+        if (status !== "ready") {
+          setError(`Map error: ${e.error?.message || "Unknown error"}`);
+          setStatus("error");
+        }
+      });
+
+      // Navigation controls
       map.addControl(
         new mapboxgl.NavigationControl({ visualizePitch: true }),
         "bottom-right"
@@ -120,16 +158,18 @@ export function CommandMap({
 
       mapRef.current = map as unknown as mapboxgl.Map;
     } catch (err) {
-      console.error("Mapbox init failed:", err);
-      setError("Failed to load map");
+      console.error("[CommandMap] Mapbox init failed:", err);
+      setError(`Failed to initialize map: ${err instanceof Error ? err.message : "Unknown error"}`);
+      setStatus("error");
     }
   }
 
   async function initGoogle() {
     try {
       const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
-      if (!apiKey) {
-        setError("NEXT_PUBLIC_GOOGLE_MAPS_KEY not set — using fallback view");
+      if (!apiKey || apiKey.trim() === "") {
+        setError("Google Maps key not available — redeploy after setting NEXT_PUBLIC_GOOGLE_MAPS_KEY");
+        setStatus("error");
         return;
       }
 
@@ -147,7 +187,6 @@ export function CommandMap({
 
       const g = (window as unknown as Record<string, unknown>).google as typeof google;
 
-      // Google Maps with satellite view + 3D tilt
       const map = new g.maps.Map(mapContainer.current!, {
         center: { lat: center.lat, lng: center.lng },
         zoom,
@@ -161,7 +200,6 @@ export function CommandMap({
         mapId: "command-center-map",
       });
 
-      // HQ marker
       const { AdvancedMarkerElement } = g.maps.marker as typeof google.maps.marker;
       new AdvancedMarkerElement({
         position: { lat: center.lat, lng: center.lng },
@@ -169,10 +207,11 @@ export function CommandMap({
         title: "Old Bishop Farm — HQ",
       });
 
-      setMapLoaded(true);
+      setStatus("ready");
     } catch (err) {
-      console.error("Google Maps init failed:", err);
-      setError("Failed to load Google Maps");
+      console.error("[CommandMap] Google Maps init failed:", err);
+      setError(`Failed to load Google Maps: ${err instanceof Error ? err.message : "Unknown error"}`);
+      setStatus("error");
     }
   }
 
@@ -181,10 +220,11 @@ export function CommandMap({
       className={`absolute inset-0 w-full h-full ${className}`}
       style={{ zIndex: 0 }}
     >
+      {/* Map container — always rendered so it has dimensions */}
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* Fallback gradient when no API key or loading */}
-      {(!mapLoaded || error) && (
+      {/* Overlay: only show when error (not during loading — map renders into the container) */}
+      {status === "error" && (
         <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
           <div className="text-center space-y-3">
             <div className="w-16 h-16 mx-auto rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
@@ -202,15 +242,20 @@ export function CommandMap({
                 />
               </svg>
             </div>
-            {error ? (
-              <p className="text-sm text-white/50 max-w-xs">{error}</p>
-            ) : (
-              <div className="flex items-center gap-2 text-white/40">
-                <div className="w-1.5 h-1.5 rounded-full bg-white/40 animate-pulse" />
-                <span className="text-sm">Loading satellite imagery...</span>
-              </div>
-            )}
+            <p className="text-sm text-white/50 max-w-xs">{error}</p>
+            <p className="text-[10px] text-white/30 max-w-xs">
+              NEXT_PUBLIC_ environment variables are embedded at build time.
+              After setting them on Vercel, trigger a new deployment.
+            </p>
           </div>
+        </div>
+      )}
+
+      {/* Loading spinner — subtle, bottom-left so it doesn't block the map render */}
+      {status === "loading" && (
+        <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-md px-3 py-1.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-white/40 animate-pulse" />
+          <span className="text-xs text-white/40">Loading map...</span>
         </div>
       )}
     </div>
