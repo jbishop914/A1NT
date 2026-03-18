@@ -46,3 +46,47 @@ First working session for A1 Integrations (A1NT). The business concept, target m
 - Begin module toggle UI — the core interaction where clients activate/deactivate AI modules
 
 ---
+
+## Session 1b — March 18, 2026 (Design Direction & CI Module)
+
+### Design Direction Established
+- **Aesthetic:** Nuxt UI Pro-inspired — clean, minimal, professional, elegant.
+- **Color Philosophy:** Monochrome as the default. Color used sparingly and intentionally for contrast, status indicators, and calls to action. Monochrome icons and symbols throughout.
+- **Space:** Maximize efficiency. No wasted pixels.
+- **Modular Dashboard:** Users can pin important content front-and-center or tuck it into menus/slide-outs/drawers. Layout adapts to role:
+  - **Receptionist/Office Manager:** Calls in progress, work orders created today, incoming queue.
+  - **Field Technician (mobile):** Work orders front and center, quick-access camera button for attaching photos to current work order, minimal chrome.
+  - **Owner/Ops Manager:** Business intelligence, KPIs, module status overview.
+- **Key Principle:** Every user should be able to customize their view to match their workflow, but smart defaults per role should make it useful immediately out of the box.
+
+### New Module Specified: Client Intelligence (CI)
+A universal module available across all industry templates. Serves as both a core business tool and a showcase of A1NT's AI capabilities.
+
+**Core Layer (Client Directory):**
+- Client detail cards with basic info, links to all relevant site areas
+- Document uploads: forms, certifications, tax info, photos of operations
+- Contact info, notes, tags
+
+**Smart Features Layer:**
+- **One-Time Analysis:** Basic scan or Advanced scan across full client list
+- **Recurring Analysis:** Scheduled reports on configurable cadence
+- **Client Filtering:** Sort/group by location, size, subcategory, revenue, onboarding date, sales volume
+- **Benchmarking:** Calculate averages across all clients (weekly service calls, installs, estimates). Compare to industry averages. Score and rank each client.
+- **Opportunity Detection:**
+  - Identify high-performing client behaviors to replicate across lower-activity clients
+  - Spot category trends (e.g., "spring cleaning packages sell well here — propose to these 130 clients")
+  - Auto-queue marketing actions → pushes to Sales & Marketing module with one click
+- **Regional/Climate Intelligence:** Factor in weather, precipitation, seasonal patterns for outdoor industries. Correlate client activity dips with environmental data.
+- **Industry News Integration:** Background agents scan for relevant industry news (pest activity, new regulations, product recalls, material shortages) and surface actionable suggestions tied to specific client segments.
+- **Preventative Forecasting:** Identify emerging problems before they hit — declining activity trends, seasonal risk patterns, supply chain signals.
+
+### Product Philosophy Note
+A1NT clients should always feel confident they have the best, most cutting-edge AI technology at their fingertips — ahead of or at worst alongside their competition. The platform must constantly evaluate and integrate the latest AI capabilities. The CI module is the flagship demonstration of this commitment.
+
+### Up Next
+- Begin dashboard layout implementation with the established design direction
+- Add CI module models to the Prisma schema
+- Create design system documentation (color tokens, spacing, typography)
+- Build role-adaptive dashboard shell
+
+---
