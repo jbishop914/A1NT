@@ -90,3 +90,37 @@ A1NT clients should always feel confident they have the best, most cutting-edge 
 - Build role-adaptive dashboard shell
 
 ---
+
+## Session 1c — March 18, 2026 (Module Architecture)
+
+### Goals
+Define the complete universal module list for the A1NT core framework, with detailed feature specs and build priority.
+
+### Work Produced
+- **`docs/MODULES.md`** — Full specification for 12 universal modules:
+  1. Command Center (Dashboard) — role-adaptive shell, widget system, KPI bar
+  2. Client Intelligence (CI) — directory + AI analysis + benchmarking + forecasting
+  3. Scheduling & Dispatching — calendar, dispatch board, route optimization, booking widget
+  4. Work Orders & Job Tracking — digital work orders, photo attachments, status pipeline
+  5. Invoicing & Payments — auto-invoicing from work orders, Stripe, payment portal
+  6. Employee & Workforce Management — profiles, time tracking, certifications, payroll export
+  7. Inventory & Parts Management — stock tracking, multi-location, POs, reorder automation
+  8. AI Receptionist & Phone System — AI voice agent, call routing, transcript logging
+  9. Sales & Marketing Automation — campaigns, lead pipeline, estimates, referral tracking
+  10. Financial Reporting & Analytics — P&L, cash flow, revenue breakdowns, report builder
+  11. Fleet & Equipment Management — vehicles, maintenance scheduling, GPS, fuel tracking
+  12. Documents & Knowledge Base — storage, templates, SOPs, form builder, e-signatures
+
+- **Build priority established:**
+  - P0: Command Center + Client Intelligence (the shell and the client foundation)
+  - P1: Scheduling, Work Orders, Invoicing (core operational loop)
+  - P2: Workforce, Inventory, AI Receptionist (operational depth)
+  - P3: Sales & Marketing, Financial Reports, Fleet, Documents (growth and analysis layer)
+
+### Up Next
+- Begin building P0: Command Center dashboard shell with sidebar navigation
+- Scaffold the page routes for all 12 modules
+- Seed the database with module definitions
+- Start CI module core layer (client directory)
+
+---
