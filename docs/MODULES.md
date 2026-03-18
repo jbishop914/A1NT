@@ -244,6 +244,72 @@ The filing cabinet, training manual, and compliance library in one place.
 
 ---
 
+### 13. Infrastructure & Geo
+**Slug:** `infrastructure-geo` | **Category:** Operations & Intelligence | **Overlap:** Universal
+
+The spatial brain of the platform. A layered map/GIS system that serves as both an operational tool and an intelligence layer — two contexts built on a shared core map engine.
+
+**Core Map Engine (shared platform service):**
+- Base map rendering (satellite, street, terrain) via Mapbox GL JS
+- Pin/marker system, drawing tools (polygons, lines, freehand), annotations
+- Layer management — each module registers its own layers, users toggle visibility
+- Search, filter, geocode
+- Cross-module layer reading (dispatcher sees routes + work order pins simultaneously)
+
+**Client-Side Geo (Customer Locations):**
+- Client location directory on map — filtered by status, tags, revenue, region
+- Drill-down into individual client sites — campus/building-level detail
+- Sticky pins with popups (hazard warnings, access instructions, equipment locations)
+- Freehand drawing, geometry tools, photo-tagged annotations
+- Incident tracking with precise geolocation — injuries, property damage, near-misses
+- Workers' comp injury reports with OSHA compliance, auto-archiving
+- Trend analysis — heat maps across locations, filter by type/severity/time
+- Compliance audit trail
+
+**In-House Geo (Own Facilities):**
+- Map own properties — office, warehouse, shop, parking, yard
+- Pin utilities/services — electrical panels, water mains, gas shutoffs, HVAC
+- Routine inspection tracking — fire alarms, sprinklers, elevators
+- Emergency preparedness — evacuation routes, assembly points, protocol by situation type
+- Drill scheduling and tracking
+
+**3D Digital Twin (Premium Tier):**
+- Three.js-based 3D building model for HQ/facilities
+- Virtual onboarding walkthroughs, maintenance department tool
+- Import your own model (FBX, glTF, IFC) or have A1 build one ($XX/month)
+- Integration with separate photogrammetry project (Autodesk Reality Capture API)
+
+> Full specification: `docs/MODULE-INFRASTRUCTURE-GEO.md`
+
+---
+
+### 14. Website Builder & Manager
+**Slug:** `website-builder` | **Category:** Growth & Client-Facing | **Overlap:** Universal
+
+An in-house website creator that gives every client a professional web presence connected in real-time to their Command Center.
+
+**Tier 1 — Static Marketing Site (Included):**
+- Clean, mobile-responsive site — home, about, services, contact, reviews
+- Live data from A1NT: hours, services, team profiles, service area map, promotions
+- Industry-specific templates (constrained builder — prevents ugly results)
+- Custom domain + SSL, SEO basics, analytics dashboard
+
+**Tier 2 — Customer Portal (Add-on):**
+- Customer login — view appointments, pay invoices, request service, message business
+- Service history, document uploads, self-scheduling
+- Reduces inbound calls, improves payment collection
+
+**Tier 3 — Premium SaaS Portal:**
+- Real-time status dashboards, subscription management
+- Route/delivery tracking via Geo module (shipping companies)
+- Knowledge base, multi-location, API access, white-label option
+
+**Real-time sync:** Organization settings, Sales & Marketing promotions, Workforce team page, Scheduling availability, Invoicing portal, Geo service area map, Work Order customer history — all feed the website automatically.
+
+> Full specification: `docs/MODULE-WEBSITE-BUILDER.md`
+
+---
+
 ## Build Priority
 
 | Priority | Module | Rationale |
@@ -256,7 +322,12 @@ The filing cabinet, training manual, and compliance library in one place.
 | P2 | Employee & Workforce | People management, time tracking |
 | P2 | Inventory & Parts | Material tracking, cost awareness |
 | P2 | AI Receptionist | The wow factor — but needs scheduling + work orders built first |
+| P2 | Infrastructure & Geo (Phase 1-2) | Core map engine + client location pins + site drill-down — feeds dispatch and fleet |
 | P3 | Sales & Marketing | Growth engine — feeds from CI |
 | P3 | Financial Reporting | Aggregates data from everything else |
 | P3 | Fleet & Equipment | Valuable but not day-one essential |
 | P3 | Documents & Knowledge Base | Important for onboarding and compliance, builds over time |
+| P3 | Website Builder (Tier 1) | Static marketing sites — builds on existing module data |
+| P4 | Infrastructure & Geo (Phase 3-5) | Incident/compliance tracking, in-house facilities, dispatch layer |
+| P4 | Website Builder (Tier 2-3) | Customer portal + premium SaaS features |
+| P5 | Infrastructure & Geo (Phase 6-7) | 3D Digital Twin + photogrammetry integration |

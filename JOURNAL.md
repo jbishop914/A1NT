@@ -202,3 +202,55 @@ Build the P0 deliverables: Command Center dashboard shell with sidebar navigatio
 - Mobile-responsive testing and technician field view
 
 ---
+
+## Session 2b — March 18, 2026 (New Modules: Infrastructure & Geo + Website Builder)
+
+### Goals
+Capture and spec out two major new module concepts Josh described: Infrastructure & Geo (spatial/GIS platform) and Website Builder & Manager (client-facing web presence).
+
+### Work Produced
+
+**`docs/MODULE-INFRASTRUCTURE-GEO.md`** — Full specification:
+- Architecture: shared core map engine (Mapbox GL JS) that other modules layer onto
+- Client-Side Geo: location directory, site drill-down, sticky pins with popups, drawing/annotation tools, photo geo-tagging
+- Incident & Compliance: geolocation-tagged incidents, workers' comp with OSHA fields, trend analysis heat maps, audit trail
+- In-House Geo: own facility management, utility/service pins, routine inspections, emergency preparedness (evacuation routes, protocols by situation type, drill scheduling)
+- 3D Digital Twin: Three.js premium tier, photogrammetry integration path with separate Autodesk Reality Capture project
+- Cross-module layer system: dispatch routes, fleet tracking, work order pins, sales territories all as toggleable layers
+- Data model proposals: Location, MapAnnotation, Incident, EmergencyPlan, FacilityAsset
+- Phased build plan (7 phases from core map through 3D digital twin)
+
+**`docs/MODULE-WEBSITE-BUILDER.md`** — Full specification:
+- Tier 1 (included): Static marketing site with live data from A1NT modules, industry templates, constrained builder
+- Tier 2 (add-on): Customer portal with login, invoice viewing/payment, service requests, self-scheduling
+- Tier 3 (premium): SaaS-style portal with subscriptions, route tracking, knowledge base, API, white-label
+- Real-time sync architecture: 8 modules feed website data automatically
+- Builder interface: template gallery, section toggles, content editing, preview, one-click publish
+- Data model proposals: Website, WebsiteTemplate, WebsiteSection, WebsiteAnalytics
+- Revenue implications and pricing tier structure
+
+**Updated `docs/MODULES.md`:**
+- Added modules #13 (Infrastructure & Geo) and #14 (Website Builder) with summaries
+- Expanded build priority table to include phased delivery for both new modules
+- Geo Phase 1-2 at P2, Phase 3-5 at P4, Phase 6-7 (3D) at P5
+- Website Builder Tier 1 at P3, Tiers 2-3 at P4
+
+**Dashboard updates:**
+- Added Infrastructure & Geo page route (`/dashboard/infrastructure-geo`) with placeholder
+- Added Website Builder page route (`/dashboard/website-builder`) with placeholder
+- Updated sidebar: Geo under Management group, Website Builder under Growth & Analytics
+- Updated breadcrumb nav with new route labels
+
+### Key Design Decisions
+- Geo module is a **platform service**, not a silo — its core map engine is shared, and other modules register layers onto it
+- Mapbox GL JS recommended over Google Maps for core engine — better dev experience, monochrome styling matches A1NT aesthetic, built-in 3D terrain for future digital twin
+- Website Builder is intentionally constrained (not Wix/Squarespace) — template-based with section toggles to prevent ugly results
+- Both modules have clear upsell paths: Geo → 3D Digital Twin ($XX/month), Website → Customer Portal → Premium SaaS
+
+### Up Next
+- Continue P1 module development (Scheduling, Work Orders, Invoicing)
+- Connect to PostgreSQL and seed with module definitions
+- Role-based dashboard layouts
+- Begin Geo module Phase 1 when P1 operational loop is solid
+
+---

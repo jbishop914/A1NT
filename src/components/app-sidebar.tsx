@@ -15,6 +15,8 @@ import {
   BarChart3,
   Truck,
   FileText,
+  MapPin,
+  Globe,
   ChevronDown,
   Settings,
   Building2,
@@ -85,6 +87,11 @@ const managementModules = [
     href: "/dashboard/ai-receptionist",
     icon: Phone,
   },
+  {
+    title: "Infrastructure & Geo",
+    href: "/dashboard/infrastructure-geo",
+    icon: MapPin,
+  },
 ];
 
 const growthModules = [
@@ -107,6 +114,11 @@ const growthModules = [
     title: "Documents",
     href: "/dashboard/documents",
     icon: FileText,
+  },
+  {
+    title: "Website Builder",
+    href: "/dashboard/website-builder",
+    icon: Globe,
   },
 ];
 

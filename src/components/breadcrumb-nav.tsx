@@ -16,6 +16,8 @@ const routeLabels: Record<string, string> = {
   "financial-reports": "Financial Reports",
   "fleet-equipment": "Fleet & Equipment",
   documents: "Documents",
+  "infrastructure-geo": "Infrastructure & Geo",
+  "website-builder": "Website Builder",
   settings: "Settings",
 };
 
