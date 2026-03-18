@@ -605,3 +605,84 @@ Build all three P2 modules — Employee & Workforce, Inventory & Parts Managemen
 - Live UniFi Protect camera feed integration
 
 ---
+
+## Session 7 — March 18, 2026 (P3 Build: Sales & Marketing, Financial Reports, Fleet, Documents)
+
+### Goals
+Build all four P3 modules — Sales & Marketing Automation, Financial Reporting & Analytics, Fleet & Equipment Management, and Documents & Knowledge Base — completing the growth and analysis layer of the platform.
+
+### Context
+Josh confirmed plans for deep hardware integrations:
+- **VoIP + Ubiquiti:** AI Receptionist will integrate with VoIP phone system and Ubiquiti desk phones (small screens for camera feeds), all connected via VoIP and Ubiquiti APIs
+- **Mobile RFID Inventory:** Stick-on RFID tags scanned via mobile app/webapp, updating inventory in real time. Parts usage traces directly to work orders → invoices → year-end accounting. Manual entry as fallback.
+
+### Work Produced
+
+**Sample Data (`src/lib/sample-data-p3.ts`):**
+- 8 leads across all pipeline stages (New → Won/Lost) with AI lead scores, sources, follow-ups
+- 6 marketing campaigns (Email, SMS, Automated Sequence, Direct Mail, Referral Program) with open/click/convert metrics and ROI
+- 5 estimates with full line items, varying statuses (Sent, Viewed, Accepted, Declined)
+- 5 referrals from clients, partners, and employees with reward tracking
+- 6 months of financial data (Oct 2025 – Mar 2026) with revenue, expenses, profit, jobs
+- 8 expense categories with budgeted vs actual amounts
+- 6 revenue-by-service breakdowns with trend indicators
+- 5 AR aging buckets with client-level detail
+- 4 technician performance profiles
+- 5 vehicles (3 vans, 1 truck, 1 trailer) with full specs, assignments, insurance/registration dates
+- 7 maintenance records across all statuses
+- 8 pieces of equipment with serial numbers, conditions, assignments
+- 12 documents across 6 categories (Operations, HR, Client-Facing, Technical, Administrative, Safety)
+- 6 knowledge base articles including a draft RFID scanning guide
+- 6 form templates with submission counts
+- All data types fully typed with TypeScript interfaces
+
+**Sales & Marketing Module (`/dashboard/sales-marketing`):**
+- 4 KPI cards: Pipeline Value ($68,400), Conversion Rate (12.5%), Campaign Revenue ($70,100), Referrals (5)
+- Leads tab: Kanban pipeline view with 4 active columns (New, Contacted, Qualified, Proposal) + Won/Lost summary cards below. Each lead card shows name, company, AI lead score (color-coded bar: green 70+, amber 50-69, gray <50), value, source, assignee avatar, follow-up date.
+- Campaigns tab: Campaign table with type icons, audience, sent/opened/clicked/converted funnel, revenue, ROI percentage (color-coded green/red)
+- Estimates tab: Estimate table with number, client, title, status badge, amount, dates. Detail sheet with full line items grid (negative amounts in red for discounts)
+- Referrals tab: Summary cards (total, converted value, pending value) + referral table with referrer type badges
+
+**Financial Reporting Module (`/dashboard/financial-reports`):**
+- 4 KPI cards: Revenue MTD ($48,200 / +21.1%), Net Profit ($17,800 / 36.9% margin), Expenses MTD ($33,873 / vs $35,900 budget), AR Outstanding ($12,981.34 / $7,750 overdue)
+- Overview tab: CSS bar chart showing 6-month revenue/expense/profit trends. Monthly summary table with margin percentages (emerald for 30%+ margins)
+- Expenses tab: Budget vs actual per category with progress bars, over/under budget indicators
+- Revenue tab: Revenue by service type with horizontal bars, trend arrows, percentage of total
+- AR Aging tab: Stacked distribution bar, clickable aging bucket cards (Current → 90+ Days) with color gradient (emerald → red), client-level breakdown with links to Client Intelligence
+- Team Performance tab: Technician comparison with revenue bars, jobs, avg job value, $/hour, cost/job, star ratings, cross-linked to Workforce module
+
+**Fleet & Equipment Module (`/dashboard/fleet-equipment`):**
+- 4 KPI cards: Active Fleet (4/5, 1 in shop), Maintenance (2, 1 overdue), Monthly Fleet Cost ($2,305), Equipment Out (4/8, 3 available)
+- Vehicles tab: Vehicle table with name/make/model, type, status (Active/In Shop/Out of Service), assigned employee, mileage, next service date, monthly cost. Detail sheet with VIN, plate, fuel type, insurance/registration expiry warnings, cost summary, maintenance history
+- Maintenance tab: Records table with vehicle, service type, status, dates, cost, vendor. Contextual actions (Start Service, Mark Complete, Reschedule). Filters by status and vehicle
+- Equipment tab: Equipment table with name, serial number, category, status, condition, assignment, location, cost. Condition badges (Excellent → Poor). Checkout/checkin actions
+
+**Documents & Knowledge Base Module (`/dashboard/documents`):**
+- 4 KPI cards: Documents (12, 11 active), KB Articles (6, 5 published), Form Templates (6, 1,443 submissions), KB Views (586 all-time)
+- Documents tab: 12 documents with distinct type badges (Document=blue, Template=violet, SOP=amber, Form=emerald, Certificate=cyan, Training=pink), category, status, version tracking (v1-v5), file sizes, shared indicator. Search + type/category filters
+- Knowledge Base tab: Article card grid with title, category, excerpt, author, views, helpful count, tags. Published/Draft/Under Review status
+- Forms tab: Form templates table with field count, submissions, last used, assigned roles
+
+### Cross-Module Integration
+- Sales → Clients: Lead/client names link to Client Intelligence
+- Sales → Work Orders: Estimate conversion creates work orders
+- Financial → Clients: AR aging client names link to Client Intelligence
+- Financial → Workforce: Technician names link to Workforce module
+- Fleet → Workforce: Assigned employees link to Workforce profiles
+- Documents → all modules: SOPs, forms, and templates serve operational workflows
+
+### Build Verification
+- TypeScript: `npx tsc --noEmit` — clean, zero errors
+- Production build: `npm run build` — all 19 routes compiled and generated successfully
+- Visual QA: Playwright screenshots captured for all 4 modules at 1600×900 viewport
+
+### Up Next
+- Begin Website Builder module (Tier 1 — static marketing sites with live data)
+- Connect to PostgreSQL and migrate from sample data to real database records
+- Continue Infrastructure & Geo Phase 1-2 build
+- Role-based dashboard views (field tech mobile view, receptionist view)
+- VoIP integration planning for AI Receptionist
+- RFID scanner integration planning for Inventory module
+- Mobile webapp responsive design pass
+
+---
