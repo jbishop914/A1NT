@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { CommandMap } from "@/components/command-map";
+import { MapSearch } from "@/components/map-search";
+import { MapDraw } from "@/components/map-draw";
 import { CameraWidget } from "@/components/camera-widget";
 import {
   Plus,
@@ -164,16 +166,22 @@ export default function CommandCenter() {
   const [showCameras, setShowCameras] = useState(true);
   const [showActivity, setShowActivity] = useState(true);
   const [showSchedule, setShowSchedule] = useState(true);
+  const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null);
+
+  const handleMapReady = useCallback((map: mapboxgl.Map) => {
+    setMapInstance(map);
+  }, []);
 
   return (
     <div className="relative w-full h-screen overflow-hidden">
       {/* ── Full-bleed satellite map ── */}
-      <CommandMap />
+      <CommandMap onMapReady={handleMapReady} />
 
       {/* ── Overlay layer ── */}
       <div className="relative z-10 w-full h-full pointer-events-none">
-        {/* ── Top bar: KPIs ── */}
+        {/* ── Top bar: Location badge + Search + KPIs ── */}
         <div className="pointer-events-auto absolute top-0 left-0 right-0 p-3">
+          {/* Row 1: Location badge + Search bar + System status */}
           <div className="flex items-center gap-2 mb-3">
             <div className="flex items-center gap-2 bg-black/50 backdrop-blur-xl rounded-lg border border-white/[0.08] px-3 py-1.5">
               <MapPin className="w-3.5 h-3.5 text-emerald-400" />
@@ -184,7 +192,11 @@ export default function CommandCenter() {
                 500 S Meriden Rd, Cheshire, CT
               </span>
             </div>
-            <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-xl rounded-lg border border-white/[0.08] px-3 py-1.5">
+
+            {/* Hybrid search bar */}
+            <MapSearch map={mapInstance} />
+
+            <div className="ml-auto flex items-center gap-1.5 bg-black/50 backdrop-blur-xl rounded-lg border border-white/[0.08] px-3 py-1.5">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               <span className="text-[10px] font-mono text-white/60">
                 ALL SYSTEMS ONLINE
@@ -192,6 +204,7 @@ export default function CommandCenter() {
             </div>
           </div>
 
+          {/* Row 2: KPI cards */}
           <div className="grid grid-cols-4 gap-2">
             {kpis.map((kpi) => {
               const Icon = kpi.icon;
@@ -228,8 +241,9 @@ export default function CommandCenter() {
           </div>
         </div>
 
-        {/* ── Quick actions (floating, below KPIs) ── */}
-        <div className="pointer-events-auto absolute top-[140px] left-3">
+        {/* ── Left column: Quick actions + Drawing tools ── */}
+        <div className="pointer-events-auto absolute top-[140px] left-3 flex flex-col gap-2">
+          {/* Quick actions */}
           <div className="flex gap-1.5">
             {[
               { icon: ClipboardList, label: "New Work Order" },
@@ -250,6 +264,9 @@ export default function CommandCenter() {
               );
             })}
           </div>
+
+          {/* Drawing toolbar */}
+          <MapDraw map={mapInstance} />
         </div>
 
         {/* ── Right column: Activity + Schedule panels ── */}

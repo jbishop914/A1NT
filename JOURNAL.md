@@ -460,3 +460,63 @@ Deep dive into Mapbox GL JS 3D capabilities and ecosystem:
 - Evaluate Mapbox Boundaries pricing for territory/jurisdiction features
 
 ---
+
+## Session 5b — March 18, 2026 (Map Quick Wins: Search + Drawing + 3D Extrusion)
+
+### Goals
+Implement the low-hanging fruit map features before moving to P2 modules: address/client hybrid search bar, polygon drawing tools, 3D extrusion controls with color picker.
+
+### Work Produced
+
+**New Dependencies:**
+- `@mapbox/mapbox-gl-draw` v1.5.1 — Official drawing plugin
+- `@mapbox/search-js-react` v1.5.1 — Official geocoder React component
+- `@types/mapbox__mapbox-gl-draw` — TypeScript definitions
+
+**New Components:**
+
+- **`src/components/map-search.tsx`** — Hybrid address/client search bar:
+  - Glass-styled floating search bar in the Command Center top row
+  - Dual-source search: filters internal client directory AND queries Mapbox Geocoding API
+  - Client results show name, status badge (Active/Lead/Inactive), address, building/person icon
+  - Geocoder results show address with map pin icon
+  - Selecting a result flies the map to that location with smooth animation
+  - Proximity bias centered on Old Bishop Farm HQ
+  - Debounced geocoder requests (400ms) to avoid API spam
+  - 8 sample clients with geocoded lat/lng in the Cheshire, CT area
+  - Keyboard-friendly with clear button and loading spinner
+
+- **`src/components/map-draw.tsx`** — Drawing toolbar with 3D extrusion:
+  - Collapsible "Draw" button that expands into a full toolbar panel
+  - 4 drawing tools: Select (arrow), Rectangle, Polygon, Line
+  - Mapbox GL Draw integration with custom emerald-accented draw styles
+  - Per-shape properties panel ("Next Shape" for defaults, shape-specific when selected):
+    - Color picker: 8 material-inspired presets (Steel, Concrete, Brick, Wood, Glass, Forest, Navy, White)
+    - Height slider: 0–50m with real-time 3D extrusion via Mapbox `fill-extrusion`
+    - Opacity slider: 10%–100%
+  - Delete selected shape, clear all shapes
+  - Shape counter badge on collapsed button
+  - All drawn shapes automatically extruded in 3D using native Mapbox fill-extrusion layer
+
+**Modified Components:**
+
+- **`src/components/command-map.tsx`** — Added `onMapReady` callback prop to expose map instance. Added `user-extrusions` GeoJSON source and `user-extrusions-3d` fill-extrusion layer for drawn shapes.
+
+- **`src/app/dashboard/page.tsx`** — Integrated MapSearch in top bar row (between location badge and system status). Integrated MapDraw below quick actions. Map instance passed to both components via `onMapReady` callback and React state.
+
+**New Files:**
+- `src/types/mapbox-draw.d.ts` — TypeScript declarations for @mapbox/mapbox-gl-draw
+
+### Technical Notes
+- Draw CSS loaded dynamically via `<link>` tag injection (avoids Tailwind v4 CSS module resolution issues)
+- Mapbox Geocoding API called directly via fetch (simpler than the full search-js-react component for our hybrid use case)
+- Fill-extrusion layer uses data-driven expressions: `['get', 'color']`, `['get', 'height']`, `['get', 'opacity']` so each shape has independent properties
+- All 19 routes compile clean in production build
+
+### Up Next
+- Build P2 modules: Employee & Workforce, Inventory & Parts, AI Receptionist
+- Wire client markers/clustering on the map (when client data is in database)
+- Add measurement display (area, perimeter) to drawn polygons
+- Census demographic choropleth layers
+
+---

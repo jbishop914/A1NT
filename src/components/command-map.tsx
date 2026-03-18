@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 // Old Bishop Farm, Cheshire CT
@@ -18,6 +18,7 @@ interface CommandMapProps {
   bearing?: number;
   provider?: MapProvider;
   className?: string;
+  onMapReady?: (map: mapboxgl.Map) => void;
 }
 
 export function CommandMap({
@@ -27,11 +28,14 @@ export function CommandMap({
   bearing = DEFAULT_BEARING,
   provider = "mapbox",
   className = "",
+  onMapReady,
 }: CommandMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
+  const onMapReadyRef = useRef(onMapReady);
+  onMapReadyRef.current = onMapReady;
 
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -138,7 +142,31 @@ export function CommandMap({
           )
           .addTo(map);
 
+        // Add a GeoJSON source for user-drawn extrusions (starts empty)
+        map.addSource("user-extrusions", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+
+        // Add the 3D fill-extrusion layer for user-drawn shapes
+        map.addLayer({
+          id: "user-extrusions-3d",
+          type: "fill-extrusion",
+          source: "user-extrusions",
+          paint: {
+            "fill-extrusion-color": ["get", "color"],
+            "fill-extrusion-height": ["get", "height"],
+            "fill-extrusion-base": ["get", "base"],
+            "fill-extrusion-opacity": ["get", "opacity"],
+          },
+        });
+
         setStatus("ready");
+
+        // Notify parent that map is ready
+        if (onMapReadyRef.current) {
+          onMapReadyRef.current(map);
+        }
       });
 
       map.on("error", (e) => {
