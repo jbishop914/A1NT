@@ -98,13 +98,15 @@ model Organization {
   template      Template?    @relation(fields: [templateId], references: [id])
 
   // Relations
-  users         User[]
-  clients       Client[]
-  employees     Employee[]
-  invoices      Invoice[]
-  tasks         Task[]
-  modules       OrganizationModule[]
-  activityLogs  ActivityLog[]
+  users          User[]
+  clients        Client[]
+  employees      Employee[]
+  invoices       Invoice[]
+  tasks          Task[]
+  workOrders     WorkOrder[]
+  scheduleEvents ScheduleEvent[]
+  modules        OrganizationModule[]
+  activityLogs   ActivityLog[]
 
   @@index([industry])
 }
@@ -213,6 +215,8 @@ model Client {
   // Relations
   invoices       Invoice[]
   tasks          Task[]
+  workOrders     WorkOrder[]
+  scheduleEvents ScheduleEvent[]
   contacts       Contact[]
 
   @@index([organizationId])
@@ -255,7 +259,148 @@ model Employee {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
+  // Relations
+  workOrders     WorkOrder[]
+  scheduleEvents ScheduleEvent[]
+
   @@index([organizationId])
+}
+
+// ============================================================================
+// WORK ORDERS & JOB TRACKING
+// ============================================================================
+
+enum WorkOrderStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  INVOICED
+  CANCELLED
+}
+
+enum WorkOrderPriority {
+  LOW
+  NORMAL
+  HIGH
+  EMERGENCY
+}
+
+model WorkOrder {
+  id              String            @id @default(cuid())
+  organizationId  String
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orderNumber     String            // e.g., "WO-1084"
+  title           String
+  description     String?
+  status          WorkOrderStatus   @default(NEW)
+  priority        WorkOrderPriority @default(NORMAL)
+  serviceType     String?           // e.g., "HVAC Repair", "Plumbing Install"
+
+  // Assignment
+  assigneeId      String?
+  assignee        Employee?         @relation(fields: [assigneeId], references: [id])
+
+  // Client
+  clientId        String?
+  client          Client?           @relation(fields: [clientId], references: [id])
+  serviceAddress  String?
+
+  // Scheduling
+  scheduledStart  DateTime?
+  scheduledEnd    DateTime?
+  actualStart     DateTime?
+  actualEnd       DateTime?
+  estimatedHours  Float?
+  actualHours     Float?
+
+  // Materials & costs
+  materialsUsed   Json?             // Array of { item, quantity, cost }
+  laborCost       Float?            @default(0)
+  materialCost    Float?            @default(0)
+  totalCost       Float?            @default(0)
+
+  // Documentation
+  notes           String?
+  internalNotes   String?
+  photos          String[]          // URLs to uploaded photos
+
+  // Completion
+  completedAt     DateTime?
+  completedById   String?
+
+  // Invoice link
+  invoiceId       String?
+  invoice         Invoice?          @relation(fields: [invoiceId], references: [id])
+
+  // Metadata
+  tags            String[]
+  customFields    Json?             // Template-specific fields (VIN, unit model, etc.)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  // Relations
+  scheduleEvents  ScheduleEvent[]
+
+  @@unique([organizationId, orderNumber])
+  @@index([organizationId])
+  @@index([status])
+  @@index([assigneeId])
+  @@index([clientId])
+}
+
+// ============================================================================
+// SCHEDULING & DISPATCHING
+// ============================================================================
+
+enum ScheduleEventType {
+  JOB            // Linked to a work order
+  APPOINTMENT    // Client appointment (no work order yet)
+  BLOCK          // Blocked time (PTO, meeting, break)
+  RECURRING      // Recurring maintenance/service
+}
+
+model ScheduleEvent {
+  id              String             @id @default(cuid())
+  organizationId  String
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  eventType       ScheduleEventType  @default(JOB)
+
+  // Timing
+  startTime       DateTime
+  endTime         DateTime
+  allDay          Boolean            @default(false)
+
+  // Assignment
+  assigneeId      String?
+  assignee        Employee?          @relation(fields: [assigneeId], references: [id])
+
+  // Link to work order (if JOB type)
+  workOrderId     String?
+  workOrder       WorkOrder?         @relation(fields: [workOrderId], references: [id])
+
+  // Client context
+  clientId        String?
+  client          Client?            @relation(fields: [clientId], references: [id])
+  location        String?
+
+  // Recurrence
+  isRecurring     Boolean            @default(false)
+  recurrenceRule  String?            // iCal RRULE format
+
+  // Status
+  isCancelled     Boolean            @default(false)
+  notes           String?
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([organizationId])
+  @@index([assigneeId])
+  @@index([startTime])
 }
 
 // ============================================================================
@@ -350,6 +495,7 @@ model Invoice {
   // Relations
   lineItems      InvoiceLineItem[]
   payments       Payment[]
+  workOrders     WorkOrder[]
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])

@@ -254,3 +254,76 @@ Capture and spec out two major new module concepts Josh described: Infrastructur
 - Begin Geo module Phase 1 when P1 operational loop is solid
 
 ---
+
+## Session 3 — March 18, 2026 (P1 Build: Scheduling, Work Orders, Invoicing)
+
+### Goals
+Build the three P1 operational modules that form the core business loop: Scheduling & Dispatching, Work Orders & Job Tracking, and Invoicing & Payments. Replace placeholder pages with fully functional UI powered by sample data.
+
+### Work Produced
+
+**Database Schema Updates (`prisma/schema.prisma`):**
+- Added `WorkOrder` model with full relations (status pipeline, priority levels, client/employee FK, scheduling, cost tracking, notes)
+- Added `ScheduleEvent` model with event types (Job, Appointment, Block, Recurring), employee assignment, work order linkage
+- Both models include proper relations to existing Client, Employee, and Organization models
+
+**Sample Data System (`src/lib/sample-data.ts`):**
+- Comprehensive test data for all three P1 modules:
+  - 4 employees with roles, initials, and skill sets
+  - 10 work orders across all 7 statuses (New → Invoiced) with realistic service industry content
+  - 9 schedule events spanning Mon Mar 16 – Fri Mar 20 (jobs, appointments, blocks, recurring)
+  - 6 invoices with full line items, tax calculations, and multiple statuses (Draft, Sent, Paid, Overdue)
+- Typed interfaces and exported constants for UI consumption
+
+**Scheduling & Dispatching Module (`/dashboard/scheduling`):**
+- 4 KPI cards: Today's Jobs, This Week, Unassigned, Team Available (all computed from data)
+- Toolbar: Day/Week tab switcher, date navigation arrows, technician filter dropdown, "New Event" button
+- Week View Calendar: CSS grid layout with employee rows × 5-day columns. Event blocks show time range (monospace), title, and client name. Event types visually differentiated (Job=solid, Appointment=dashed border, Block=muted, Recurring=dashed). Today's column highlighted.
+- Resource Sidebar: Team overview with utilization bars (busy hours / total hours) and skill badges per employee. Unassigned work orders quick view.
+- Upcoming Events: Collapsible chronological list of next 5 events with assignee avatars and work order badges.
+- Event Detail Sheet: Full slide-out with schedule info, assignee, client (linked), location, linked work order, action buttons.
+
+**Work Orders & Job Tracking Module (`/dashboard/work-orders`):**
+- 4 KPI cards: Total Orders (10), In Progress (1), Completed (4), Revenue ($7,300)
+- Dual-view system with Pipeline/Table tab toggle:
+  - **Pipeline View (Kanban):** 6 status columns (New → Invoiced) with draggable-looking cards. Each card shows order number, title, priority badge (Emergency=red, High=amber, Normal=secondary, Low=outline), client, assignee avatar, scheduled date. Empty state for columns with no orders.
+  - **Table View:** Full data table with 9 columns, sort arrows, monospace for numbers/dates, avatar initials for assignees.
+- Triple filter system: Status dropdown, Priority dropdown, Assignee dropdown (including "Unassigned" option)
+- Work Order Detail Sheet: Full slide-out with job details (title, description, service type), client & location (linked), assignee info, schedule, time & cost breakdown, notes, timestamps. Context-aware actions: "Create Invoice" only for completed orders, plus Edit, Change Status, View Schedule.
+
+**Invoicing & Payments Module (`/dashboard/invoicing`):**
+- 4 KPI cards: Total Outstanding ($8,781.34), Overdue ($2,400 with red alert icon), Paid MTD ($1,651.35), Draft (1)
+- Status Distribution Bar: Proportional colored segments showing Draft/Sent/Paid/Overdue breakdown with legend.
+- Invoice Table: 8 columns (Invoice #, Client, Status, Issue Date, Due Date, Amount, Paid, Balance). Status badges with distinct colors (Paid=emerald, Sent=blue, Viewed=violet, Draft=secondary, Overdue=red). All monetary values in monospace with 2 decimal places.
+- Invoice Detail Sheet: Full slide-out with invoice number + status header, client link, dates (overdue highlighted red), work order link, line items table (compact grid with description/qty/price/total), financial summary (subtotal → tax → total → paid → balance due), notes. Action buttons: Send, Mark as Paid, Download PDF, Edit.
+
+**Cross-Module Links (all wired):**
+- Work order numbers in Scheduling → link to Work Orders page
+- Client names across all modules → link to Client Intelligence page
+- "Create Invoice" from completed work order → link to Invoicing page
+- Schedule references in Work Orders → link to Scheduling page
+- Work order references in Invoicing → link to Work Orders page
+
+### Design Consistency
+- All three modules follow the established monochrome design system — oklch tokens, Geist font, minimal color
+- Consistent patterns: `p-6 space-y-6 max-w-[1400px]` wrapper, `text-sm` body, `text-xs` labels, `text-[10px]` for tiny badges, `font-mono` for numbers/dates/codes
+- Sheet slide-outs follow the Client Intelligence pattern: section headers as uppercase tracking-wider labels, Separator between sections, consistent action button placement
+- Dark mode verified across all three modules
+- All interactive elements have `data-testid` attributes for future test automation
+
+### Decisions Made
+- Pipeline (kanban) view is the default for Work Orders — matches how field service managers mentally model job flow
+- Table view is secondary but essential for searching/filtering large datasets
+- Invoice detail shows complete financial breakdown inline (no separate page) — supports the "content in drawers" philosophy
+- Status distribution bar on Invoicing page provides at-a-glance health of AR — most useful for the owner/office manager role
+- Scheduling resource sidebar shows utilization bars — quick visual for dispatch decisions
+
+### Up Next
+- Connect to PostgreSQL database and migrate sample data to real records
+- Build P2 modules: Employee & Workforce, Inventory & Parts, AI Receptionist
+- Implement role-based dashboard views (field tech mobile view, receptionist view)
+- Add drag-and-drop to scheduling calendar and work order pipeline
+- Implement real invoice PDF generation and email sending
+- Begin Infrastructure & Geo Phase 1 (core map engine)
+
+---
