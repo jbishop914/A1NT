@@ -124,3 +124,81 @@ Define the complete universal module list for the A1NT core framework, with deta
 - Start CI module core layer (client directory)
 
 ---
+
+## Session 2 — March 18, 2026 (P0 Build: Dashboard Shell + Client Intelligence)
+
+### Goals
+Build the P0 deliverables: Command Center dashboard shell with sidebar navigation, all 12 module page routes, and the Client Intelligence module's core client directory.
+
+### Design System Established
+- **Monochrome design system** implemented in `globals.css` — Nuxt UI Pro-inspired palette using oklch color space
+- Light mode: warm-neutral whites (#F8F7F5 feel) with near-black text and subtle borders
+- Dark mode: deep neutral (#1C1B19 feel) with properly contrasted light text
+- Color used only for semantic meaning: emerald for positive trends, single accent for active states
+- `font-variant-numeric: tabular-nums lining-nums` on body for data-aligned numbers
+- Chart colors follow a monochrome gradient rather than rainbow — stays on-brand
+
+### Work Produced
+
+**Dashboard Layout Shell:**
+- `src/app/dashboard/layout.tsx` — SidebarProvider + SidebarInset layout with sticky header
+- `src/components/app-sidebar.tsx` — Full sidebar with:
+  - A1 Integrations logo (inline SVG geometric mark)
+  - 4 collapsible nav groups: Core, Operations, Management, Growth & Analytics
+  - All 12 modules with Lucide icons, active state highlighting
+  - Settings and Organization links in footer
+- `src/components/breadcrumb-nav.tsx` — Dynamic breadcrumb from pathname
+- `src/components/theme-provider.tsx` — Client-side theme context (system preference + manual toggle)
+- `src/components/theme-toggle.tsx` — Sun/Moon toggle button
+- shadcn Collapsible component added
+
+**Command Center Page (`/dashboard`):**
+- 4 KPI cards: Revenue MTD, Active Jobs, Active Clients, Open Invoices — with trend indicators
+- Quick action buttons: New Work Order, New Client, New Invoice
+- Recent Activity feed with timestamped events and type indicators
+- Today's Schedule panel with time slots, job descriptions, technician assignments, and status badges
+- Responsive grid layout (4-col KPIs, 3+2 col main content)
+
+**Client Intelligence Module (`/dashboard/clients`):**
+- 4 summary cards: Total Clients, Active, New Leads, Avg Revenue
+- Search bar with real-time filtering across name, email, city, tags
+- Filter and Sort toolbar buttons (UI ready, functionality stub)
+- Full client data table with: Name/City, Status badge, Tags, Revenue (monospace), Open Jobs, Last Service, actions menu
+- Client detail slide-out (Sheet) with:
+  - Contact info (email, phone, location)
+  - Revenue and activity overview
+  - Tags display
+  - Quick links to Work Orders, Invoices, Schedule
+- 8 sample clients across Commercial, Residential, and Institutional categories
+- Dropdown menu per row: View Details, Edit, Create Work Order, Create Invoice
+
+**Module Placeholder Pages (10 routes):**
+- Scheduling, Work Orders, Invoicing (P1)
+- Workforce, Inventory, AI Receptionist (P2)
+- Sales & Marketing, Financial Reports, Fleet & Equipment, Documents (P3)
+- Settings page with section links
+- Each placeholder shows module icon, description, priority badge, and planned features list
+- Consistent "Coming Soon" pattern with dashed border
+
+**Infrastructure:**
+- Root `/` redirects to `/dashboard`
+- All navigation uses Next.js `<Link>` for client-side routing
+- `data-testid` attributes on all interactive elements
+- Dark mode works correctly across all pages
+- Sidebar active state tracks current route
+
+### Decisions Made
+- Used Geist (the Next.js default font) as both display and body — it's a clean sans-serif that matches the Nuxt UI Pro aesthetic without adding extra font loads
+- Chart colors are monochrome (gray gradient) rather than colorful — stays true to the "color sparingly" directive
+- Sidebar groups default collapsed for Management and Growth to keep the nav clean on first load
+- Client table uses monospace for currency values (tabular-nums) for proper column alignment
+- Slide-out panel (Sheet) rather than full page for client details — supports the "modular" philosophy of content tucked in drawers
+
+### Up Next
+- Connect to real database (PostgreSQL) and seed with module definitions + sample data
+- Build P1 modules: Scheduling calendar view, Work Order status pipeline, Invoice creation
+- Implement role-based dashboard layouts (Owner vs. Manager vs. Technician views)
+- Add pinnable widget system to Command Center
+- Mobile-responsive testing and technician field view
+
+---
