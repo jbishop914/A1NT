@@ -247,7 +247,7 @@ export default function SchedulingPage() {
 
         <Select
           value={techFilter}
-          onValueChange={setTechFilter}
+          onValueChange={(v) => setTechFilter(v ?? "all")}
           data-testid="filter-technician"
         >
           <SelectTrigger className="w-[180px] h-8 text-xs" data-testid="select-technician">
@@ -649,10 +649,8 @@ export default function SchedulingPage() {
                     Reassign
                   </Button>
                   {selectedEvent.workOrderId && (
-                    <Button size="sm" variant="outline" asChild data-testid="button-view-wo">
-                      <Link href="/dashboard/work-orders">
-                        View Work Order
-                      </Link>
+                    <Button size="sm" variant="outline" render={<Link href="/dashboard/work-orders" />} data-testid="button-view-wo">
+                      View Work Order
                     </Button>
                   )}
                 </div>

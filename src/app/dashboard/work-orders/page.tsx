@@ -235,7 +235,7 @@ export default function WorkOrdersPage() {
           />
         </div>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? "all")}>
           <SelectTrigger className="w-[130px] h-8 text-xs" data-testid="select-status-filter">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -247,7 +247,7 @@ export default function WorkOrdersPage() {
           </SelectContent>
         </Select>
 
-        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+        <Select value={priorityFilter} onValueChange={(v) => setPriorityFilter(v ?? "all")}>
           <SelectTrigger className="w-[130px] h-8 text-xs" data-testid="select-priority-filter">
             <SelectValue placeholder="Priority" />
           </SelectTrigger>
@@ -259,7 +259,7 @@ export default function WorkOrdersPage() {
           </SelectContent>
         </Select>
 
-        <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+        <Select value={assigneeFilter} onValueChange={(v) => setAssigneeFilter(v ?? "all")}>
           <SelectTrigger className="w-[160px] h-8 text-xs" data-testid="select-assignee-filter">
             <SelectValue placeholder="Assignee" />
           </SelectTrigger>
@@ -612,11 +612,9 @@ function WorkOrderDetail({ wo, onClose }: { wo: WorkOrder; onClose: () => void }
         {/* Actions */}
         <div className="flex flex-wrap gap-2" data-testid="wo-actions">
           {(wo.status === "Completed") && (
-            <Button size="sm" asChild data-testid="button-create-invoice">
-              <Link href="/dashboard/invoicing">
-                <Receipt className="h-3.5 w-3.5 mr-1.5" />
-                Create Invoice
-              </Link>
+            <Button size="sm" render={<Link href="/dashboard/invoicing" />} data-testid="button-create-invoice">
+              <Receipt className="h-3.5 w-3.5 mr-1.5" />
+              Create Invoice
             </Button>
           )}
           <Button size="sm" variant="outline" data-testid="button-edit-wo">
@@ -627,11 +625,9 @@ function WorkOrderDetail({ wo, onClose }: { wo: WorkOrder; onClose: () => void }
             <ChevronRight className="h-3.5 w-3.5 mr-1.5" />
             Change Status
           </Button>
-          <Button size="sm" variant="outline" asChild data-testid="button-view-schedule">
-            <Link href="/dashboard/scheduling">
-              <Calendar className="h-3.5 w-3.5 mr-1.5" />
-              View Schedule
-            </Link>
+          <Button size="sm" variant="outline" render={<Link href="/dashboard/scheduling" />} data-testid="button-view-schedule">
+            <Calendar className="h-3.5 w-3.5 mr-1.5" />
+            View Schedule
           </Button>
         </div>
       </div>

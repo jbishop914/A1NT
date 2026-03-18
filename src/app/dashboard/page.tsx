@@ -22,28 +22,28 @@ const kpiCards = [
     title: "Revenue (MTD)",
     value: "$24,580",
     change: "+12.5%",
-    trend: "up" as const,
+    trend: "up" as "up" | "down" | "neutral",
     icon: DollarSign,
   },
   {
     title: "Active Jobs",
     value: "18",
     change: "+3",
-    trend: "up" as const,
+    trend: "up" as "up" | "down" | "neutral",
     icon: ClipboardList,
   },
   {
     title: "Active Clients",
     value: "142",
     change: "+8",
-    trend: "up" as const,
+    trend: "up" as "up" | "down" | "neutral",
     icon: Users,
   },
   {
     title: "Open Invoices",
     value: "$8,340",
     change: "6 pending",
-    trend: "neutral" as const,
+    trend: "neutral" as "up" | "down" | "neutral",
     icon: Receipt,
   },
 ];
@@ -152,13 +152,11 @@ export default function CommandCenterPage() {
             key={action.label}
             variant="outline"
             size="sm"
-            asChild
+            render={<Link href={action.href} />}
             data-testid={`button-${action.label.toLowerCase().replace(/\s+/g, "-")}`}
           >
-            <Link href={action.href}>
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
-              {action.label}
-            </Link>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            {action.label}
           </Button>
         ))}
       </div>
@@ -204,10 +202,8 @@ export default function CommandCenterPage() {
         <Card className="lg:col-span-2" data-testid="card-schedule">
           <CardHeader className="pb-3 flex flex-row items-center justify-between gap-1">
             <CardTitle className="text-sm font-semibold">Today&apos;s Schedule</CardTitle>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/dashboard/scheduling">
-                View all
-              </Link>
+            <Button variant="ghost" size="sm" render={<Link href="/dashboard/scheduling" />}>
+              View all
             </Button>
           </CardHeader>
           <CardContent className="space-y-0">

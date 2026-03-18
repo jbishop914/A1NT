@@ -39,6 +39,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
+import Link from "next/link";
 
 // Sample data
 const clients = [
@@ -275,10 +276,8 @@ export default function ClientIntelligencePage() {
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => e.stopPropagation()} />}>
                           <MoreHorizontal className="h-3.5 w-3.5" />
-                        </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem>View Details</DropdownMenuItem>
@@ -400,12 +399,10 @@ export default function ClientIntelligencePage() {
                         variant="ghost"
                         size="sm"
                         className="w-full justify-between"
-                        asChild
+                        render={<Link href={link.href} />}
                       >
-                        <a href={link.href}>
-                          {link.label}
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </a>
+                        {link.label}
+                        <ChevronRight className="h-3.5 w-3.5" />
                       </Button>
                     ))}
                   </div>

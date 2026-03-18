@@ -327,3 +327,45 @@ Build the three P1 operational modules that form the core business loop: Schedul
 - Begin Infrastructure & Geo Phase 1 (core map engine)
 
 ---
+
+## Session 3b — March 18, 2026 (Vercel Build Fixes)
+
+### Context
+After pushing the P1 module build, Vercel deployment failed with multiple TypeScript compilation errors. These were caused by shadcn v4's migration from Radix primitives to Base UI, Prisma 7.x client generation changes, and strict TypeScript narrowing.
+
+### Problems Fixed
+
+1. **`asChild` prop removal (shadcn v4 / Base UI):**
+   - shadcn v4 uses `@base-ui/react` instead of Radix — the `asChild` prop does not exist.
+   - Replaced all `asChild` usage in DropdownMenuTrigger, CollapsibleTrigger, and similar components with direct children or the `render` prop pattern.
+   - Affected files: `app-sidebar.tsx`, `clients/page.tsx`, `page.tsx` (dashboard)
+
+2. **Select `onValueChange` null handling (Base UI):**
+   - Base UI's Select passes `string | null` to `onValueChange`, not `string`.
+   - Added null coalescing: `(v) => setState(v ?? "all")` across all Select usages in Scheduling, Work Orders, and Invoicing modules.
+
+3. **KPI trend type narrowing (TypeScript strict):**
+   - TypeScript strict mode detected that `as const` narrowed trend values to specific literal strings, making some union branches unreachable.
+   - Widened type to `as "up" | "down" | "neutral"` to satisfy the compiler.
+
+4. **Prisma module resolution (`@/generated/prisma`):**
+   - Prisma 7.x generates client files without an `index.ts` barrel — `PrismaClient` lives in `client.ts`.
+   - Generated files are in `.gitignore` (correct), so they don't exist on Vercel at build time.
+   - **Fix:** Added `prisma generate` to the build script (`"build": "prisma generate && next build"`).
+   - **Fix:** Commented out `db.ts` as a placeholder since no modules import it yet and Prisma 7.x constructor API requires `accelerateUrl` when not using a direct connection.
+
+### Build Result
+- Clean build: all 19 routes compiled and generated successfully.
+- `prisma generate` runs automatically before `next build` on Vercel.
+
+### Work Produced
+- Modified: `package.json` (build script), `src/lib/db.ts` (placeholder stub)
+- Modified: `app-sidebar.tsx`, `clients/page.tsx`, `dashboard/page.tsx`, `scheduling/page.tsx`, `work-orders/page.tsx`, `invoicing/page.tsx` (type fixes)
+- All changes committed and pushed to `main`.
+
+### Up Next
+- Build P2 modules: Employee & Workforce, Inventory & Parts, AI Receptionist
+- Implement role-based dashboard views
+- Begin Infrastructure & Geo Phase 1
+
+---

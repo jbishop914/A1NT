@@ -244,7 +244,7 @@ export default function InvoicingPage() {
             data-testid="input-search-invoices"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? "all")}>
           <SelectTrigger className="w-[140px]" data-testid="select-status-filter">
             <SelectValue placeholder="Status" />
           </SelectTrigger>

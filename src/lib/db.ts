@@ -1,16 +1,22 @@
-import { PrismaClient } from "@/generated/prisma";
+// Prisma client placeholder
+// Will be configured once a database connection is established.
+// Currently no modules import this file — it exists as scaffolding.
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+// import { PrismaClient } from "@/generated/prisma/client";
+//
+// const globalForPrisma = globalThis as unknown as {
+//   prisma: PrismaClient | undefined;
+// };
+//
+// export const db =
+//   globalForPrisma.prisma ??
+//   new PrismaClient({
+//     log:
+//       process.env.NODE_ENV === "development"
+//         ? ["query", "error", "warn"]
+//         : ["error"],
+//   });
+//
+// if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
 
-export const db =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["query", "error", "warn"]
-        : ["error"],
-  });
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+export {};

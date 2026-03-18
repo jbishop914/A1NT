@@ -142,11 +142,9 @@ function NavGroup({
   return (
     <Collapsible defaultOpen={defaultOpen || hasActiveItem} className="group/collapsible">
       <SidebarGroup>
-        <SidebarGroupLabel asChild>
-          <CollapsibleTrigger className="flex w-full items-center justify-between gap-1">
-            <span>{label}</span>
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-180" />
-          </CollapsibleTrigger>
+        <SidebarGroupLabel render={<CollapsibleTrigger className="flex w-full items-center justify-between gap-1" />}>
+          <span>{label}</span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-180" />
         </SidebarGroupLabel>
         <CollapsibleContent>
           <SidebarGroupContent>
@@ -158,14 +156,12 @@ function NavGroup({
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
-                      asChild
+                      render={<Link href={item.href} />}
                       isActive={isActive}
                       data-testid={`nav-${item.href.split("/").pop()}`}
                     >
-                      <Link href={item.href}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -259,22 +255,18 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              asChild
+              render={<Link href="/dashboard/settings" />}
               isActive={pathname === "/dashboard/settings"}
               data-testid="nav-settings"
             >
-              <Link href="/dashboard/settings">
-                <Settings className="h-4 w-4" />
-                <span>Settings</span>
-              </Link>
+              <Settings className="h-4 w-4" />
+              <span>Settings</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild data-testid="nav-organization">
-              <Link href="/dashboard/settings">
-                <Building2 className="h-4 w-4" />
-                <span className="truncate">Acme Plumbing Co.</span>
-              </Link>
+            <SidebarMenuButton render={<Link href="/dashboard/settings" />} data-testid="nav-organization">
+              <Building2 className="h-4 w-4" />
+              <span className="truncate">Acme Plumbing Co.</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
