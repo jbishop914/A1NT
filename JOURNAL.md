@@ -742,3 +742,61 @@ Phased build: helper agent → onboarding + receptionist agents → agent employ
 - Database connection and migration from sample data to real records
 
 ---
+
+## Session 9 — March 18, 2026
+
+### Context
+All P3 modules were completed in Session 8 except Website Builder, which was in the architecture planning phase. Josh approved the architecture discussion and asked to proceed with building the Website Builder management module in the dashboard. He confirmed the key insight: the builder UI is the same regardless of hosting strategy — it's a content management and configuration tool that produces structured data. The deployment strategy (multi-tenant Next.js vs static HTML push) can be decided later since the "Publish" button is just the seam where that plugs in. Josh also noted the appeal of starting with simple static site generation — clean HTML landing pages with contact info — as a fast path to getting clients live.
+
+### Goals Established
+1. Build the Website Builder module page in the A1NT dashboard
+2. Include template gallery, site management, theme configuration, section editor, preview, publish controls, and analytics
+3. Add a "Quick Launch" flow concept for clients to go from zero to live landing page in minutes
+4. Follow the same P3 design patterns (shadcn v4, monochrome aesthetic, sheet detail views, KPI cards)
+
+### Work Produced
+
+**`src/lib/sample-data-p3.ts` — Website Builder data added:**
+- 6 industry-specific templates: Pro Service (Plumbing), Climate Control (HVAC), Greenscape (Landscaping), PowerLine (Electrical), FleetPro (Auto Repair), SparkClean (Cleaning)
+- 5 client websites with varying statuses: 3 Published, 1 Draft, 1 Maintenance
+- Full section configurations per site with module sync sources (Workforce, Organization, Geo, Sales & Marketing, etc.)
+- Analytics data: 30-day page views, unique visitors, form submissions, top pages, daily traffic sparklines
+- Theme configs per site: primary/accent colors, font family, dark mode toggle
+- SEO configs: title, meta description, OG image
+- Tier system: Static (Tier 1), Portal (Tier 2), Premium (Tier 3)
+
+**`src/app/dashboard/website-builder/page.tsx` — Full module page (1,290 lines):**
+
+Three main tabs:
+1. **My Sites** — Card-based site list with color swatches, status/tier badges, sparkline traffic trends, section pills showing active sections with sync indicators (⚡ Zap icon for module-synced sections), hidden section count
+2. **Templates** — 3-column grid of template cards with gradient preview swatches, industry badges, section icon pills, popularity scores, hover preview button
+3. **Analytics** — Aggregate traffic overview (total views, visitors, submissions) + per-site performance table with sparklines, top pages, sortable by views
+
+Site detail Sheet (slide-out) with 4 sub-tabs:
+- **Sections** — Drag-handle reorderable section list with visibility toggles (Switch), sync source indicators with recency, edit buttons, add section button
+- **Theme** — Primary/accent color swatches with hex values, typography preview, dark mode toggle, responsive device preview (Desktop/Tablet/Mobile) with mock site rendering
+- **SEO** — Title and meta description with character counters, Google search preview card, sitemap/schema markup/OG image toggles
+- **Stats** — Per-site analytics: 3 KPI cards, bar chart for daily traffic, top pages with percentage bars
+
+Action buttons adapt by status:
+- Draft sites: "Publish Site" primary CTA + Quick Launch card ("Get a live landing page in under 2 minutes")
+- Published/Maintenance: "Rebuild" + "View Live Site" buttons
+
+Domain info panel shows custom domain or A1NT subdomain (`*.a1nt.app`) with copy/open buttons.
+
+**Also added:** `@/components/ui/switch.tsx` via shadcn CLI (was not previously installed).
+
+**Build status:** `tsc --noEmit` clean, `npm run build` clean (19 static pages generated).
+
+### Architecture Decision (Ongoing)
+Recommended Approach B (Multi-Tenant Next.js with subdomain routing) for the deployment side, but Josh noted that starting simple with static HTML generation is tempting and practical. The builder module itself is deployment-agnostic — the "Publish" button is a placeholder seam. Decision on hosting strategy deferred; builder UI is complete.
+
+### Up Next
+- Josh to test Website Builder module UI
+- Finalize hosting/deployment strategy for client sites
+- P4: Begin Import & Onboarding module UI (import wizard, onboarding checklist, alert matrix)
+- P4: Begin AI Agents module UI (agent roster, agent profile, performance dashboard)
+- Infrastructure & Geo: remaining 3D Digital Twin features
+- Database connection and migration from sample data to real records
+
+---

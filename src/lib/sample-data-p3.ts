@@ -776,3 +776,307 @@ export const sampleFormTemplates: FormTemplate[] = [
   { id: "form-5", name: "Safety Incident Report", category: "Safety", fields: 22, submissions: 4, lastUsed: "2026-02-10", status: "Active", assignedTo: "All Employees" },
   { id: "form-6", name: "Customer Satisfaction Survey", category: "Client-Facing", fields: 8, submissions: 128, lastUsed: "2026-03-16", status: "Active", assignedTo: "Automated — Post-Job" },
 ];
+
+// ═══════════════════════════════════════════════════════════════════
+// WEBSITE BUILDER
+// ═══════════════════════════════════════════════════════════════════
+
+export type SiteStatus = "Draft" | "Published" | "Maintenance";
+export type SiteTier = "Static" | "Portal" | "Premium";
+export type TemplateIndustry = "Plumbing" | "HVAC" | "Electrical" | "Landscaping" | "General Contractor" | "Auto Repair" | "Cleaning" | "Property Management";
+export type SectionType = "hero" | "services" | "team" | "reviews" | "contact" | "map" | "promotions" | "gallery" | "about" | "faq";
+
+export interface WebsiteTemplate {
+  id: string;
+  name: string;
+  industry: TemplateIndustry;
+  description: string;
+  sections: SectionType[];
+  popularityScore: number;
+  previewStyle: { primary: string; accent: string; font: string };
+}
+
+export interface ClientWebsite {
+  id: string;
+  clientName: string;
+  templateId: string;
+  subdomain: string;
+  customDomain: string | null;
+  status: SiteStatus;
+  tier: SiteTier;
+  publishedAt: string | null;
+  lastBuildAt: string | null;
+  createdAt: string;
+  sections: WebsiteSection[];
+  theme: { primaryColor: string; accentColor: string; fontFamily: string; darkMode: boolean };
+  seo: { title: string; description: string; ogImage: string | null };
+  analytics: WebsiteAnalytics;
+}
+
+export interface WebsiteSection {
+  type: SectionType;
+  visible: boolean;
+  order: number;
+  sourceModule: string | null;
+  lastSynced: string | null;
+}
+
+export interface WebsiteAnalytics {
+  pageViews30d: number;
+  uniqueVisitors30d: number;
+  formSubmissions30d: number;
+  topPages: { path: string; views: number }[];
+  viewsByDay: { date: string; views: number }[];
+}
+
+export const websiteTemplates: WebsiteTemplate[] = [
+  {
+    id: "tpl-1",
+    name: "Pro Service",
+    industry: "Plumbing",
+    description: "Clean, authoritative layout built for service businesses. Hero with CTA, services grid, team section, and integrated contact form.",
+    sections: ["hero", "services", "about", "team", "reviews", "contact", "map"],
+    popularityScore: 94,
+    previewStyle: { primary: "#1e293b", accent: "#3b82f6", font: "Inter" },
+  },
+  {
+    id: "tpl-2",
+    name: "Climate Control",
+    industry: "HVAC",
+    description: "Bold, technical aesthetic with seasonal promotion banners and service area maps. Designed for heating and cooling specialists.",
+    sections: ["hero", "services", "promotions", "team", "reviews", "contact", "map", "faq"],
+    popularityScore: 87,
+    previewStyle: { primary: "#0f172a", accent: "#0ea5e9", font: "DM Sans" },
+  },
+  {
+    id: "tpl-3",
+    name: "Greenscape",
+    industry: "Landscaping",
+    description: "Nature-inspired design with large hero imagery, gallery showcase, and before/after sections. Built for visual portfolios.",
+    sections: ["hero", "services", "gallery", "about", "reviews", "contact"],
+    popularityScore: 91,
+    previewStyle: { primary: "#14532d", accent: "#22c55e", font: "Plus Jakarta Sans" },
+  },
+  {
+    id: "tpl-4",
+    name: "PowerLine",
+    industry: "Electrical",
+    description: "Modern, safety-conscious layout with license/certification display, emergency service banners, and structured services list.",
+    sections: ["hero", "services", "about", "reviews", "contact", "map", "faq"],
+    popularityScore: 78,
+    previewStyle: { primary: "#1c1917", accent: "#f59e0b", font: "Inter" },
+  },
+  {
+    id: "tpl-5",
+    name: "FleetPro",
+    industry: "Auto Repair",
+    description: "Automotive-centric with service menu, online booking CTA, gallery for completed work, and customer review wall.",
+    sections: ["hero", "services", "gallery", "reviews", "about", "contact", "map"],
+    popularityScore: 82,
+    previewStyle: { primary: "#18181b", accent: "#ef4444", font: "Outfit" },
+  },
+  {
+    id: "tpl-6",
+    name: "SparkClean",
+    industry: "Cleaning",
+    description: "Light, fresh design emphasizing trust signals, service packages, and easy booking. Perfect for residential and commercial cleaning.",
+    sections: ["hero", "services", "about", "reviews", "promotions", "contact"],
+    popularityScore: 85,
+    previewStyle: { primary: "#1e40af", accent: "#06b6d4", font: "DM Sans" },
+  },
+];
+
+export const clientWebsites: ClientWebsite[] = [
+  {
+    id: "site-1",
+    clientName: "Ace Plumbing & Heating",
+    templateId: "tpl-1",
+    subdomain: "ace-plumbing",
+    customDomain: "www.aceplumbingct.com",
+    status: "Published",
+    tier: "Static",
+    publishedAt: "2026-02-15",
+    lastBuildAt: "2026-03-17",
+    createdAt: "2026-01-20",
+    sections: [
+      { type: "hero", visible: true, order: 1, sourceModule: null, lastSynced: null },
+      { type: "services", visible: true, order: 2, sourceModule: "Service Config", lastSynced: "2026-03-17" },
+      { type: "about", visible: true, order: 3, sourceModule: null, lastSynced: null },
+      { type: "team", visible: true, order: 4, sourceModule: "Workforce", lastSynced: "2026-03-15" },
+      { type: "reviews", visible: true, order: 5, sourceModule: null, lastSynced: null },
+      { type: "contact", visible: true, order: 6, sourceModule: "Organization", lastSynced: "2026-03-17" },
+      { type: "map", visible: true, order: 7, sourceModule: "Geo", lastSynced: "2026-03-10" },
+    ],
+    theme: { primaryColor: "#1e293b", accentColor: "#3b82f6", fontFamily: "Inter", darkMode: false },
+    seo: { title: "Ace Plumbing & Heating | Licensed Plumbers in CT", description: "24/7 emergency plumbing and heating services in greater Hartford. Licensed, insured, and trusted since 2004.", ogImage: null },
+    analytics: {
+      pageViews30d: 2847,
+      uniqueVisitors30d: 1923,
+      formSubmissions30d: 34,
+      topPages: [
+        { path: "/", views: 1240 },
+        { path: "/services", views: 645 },
+        { path: "/contact", views: 412 },
+        { path: "/about", views: 320 },
+        { path: "/reviews", views: 230 },
+      ],
+      viewsByDay: [
+        { date: "2026-03-12", views: 82 }, { date: "2026-03-13", views: 96 },
+        { date: "2026-03-14", views: 78 }, { date: "2026-03-15", views: 112 },
+        { date: "2026-03-16", views: 68 }, { date: "2026-03-17", views: 105 },
+        { date: "2026-03-18", views: 94 },
+      ],
+    },
+  },
+  {
+    id: "site-2",
+    clientName: "Summit HVAC Solutions",
+    templateId: "tpl-2",
+    subdomain: "summit-hvac",
+    customDomain: null,
+    status: "Published",
+    tier: "Portal",
+    publishedAt: "2026-01-28",
+    lastBuildAt: "2026-03-18",
+    createdAt: "2025-12-15",
+    sections: [
+      { type: "hero", visible: true, order: 1, sourceModule: null, lastSynced: null },
+      { type: "services", visible: true, order: 2, sourceModule: "Service Config", lastSynced: "2026-03-18" },
+      { type: "promotions", visible: true, order: 3, sourceModule: "Sales & Marketing", lastSynced: "2026-03-18" },
+      { type: "team", visible: true, order: 4, sourceModule: "Workforce", lastSynced: "2026-03-16" },
+      { type: "reviews", visible: true, order: 5, sourceModule: null, lastSynced: null },
+      { type: "faq", visible: true, order: 6, sourceModule: null, lastSynced: null },
+      { type: "contact", visible: true, order: 7, sourceModule: "Organization", lastSynced: "2026-03-18" },
+      { type: "map", visible: true, order: 8, sourceModule: "Geo", lastSynced: "2026-03-12" },
+    ],
+    theme: { primaryColor: "#0f172a", accentColor: "#0ea5e9", fontFamily: "DM Sans", darkMode: false },
+    seo: { title: "Summit HVAC Solutions | Heating & Cooling Experts", description: "Professional HVAC installation, repair, and maintenance. Serving the tri-state area with 24/7 emergency service.", ogImage: null },
+    analytics: {
+      pageViews30d: 4215,
+      uniqueVisitors30d: 2890,
+      formSubmissions30d: 67,
+      topPages: [
+        { path: "/", views: 1850 },
+        { path: "/services", views: 920 },
+        { path: "/promotions", views: 510 },
+        { path: "/contact", views: 445 },
+        { path: "/reviews", views: 290 },
+      ],
+      viewsByDay: [
+        { date: "2026-03-12", views: 128 }, { date: "2026-03-13", views: 145 },
+        { date: "2026-03-14", views: 132 }, { date: "2026-03-15", views: 168 },
+        { date: "2026-03-16", views: 98 }, { date: "2026-03-17", views: 155 },
+        { date: "2026-03-18", views: 142 },
+      ],
+    },
+  },
+  {
+    id: "site-3",
+    clientName: "Green Valley Landscaping",
+    templateId: "tpl-3",
+    subdomain: "green-valley",
+    customDomain: "www.greenvalleylandscape.com",
+    status: "Published",
+    tier: "Static",
+    publishedAt: "2026-03-01",
+    lastBuildAt: "2026-03-16",
+    createdAt: "2026-02-10",
+    sections: [
+      { type: "hero", visible: true, order: 1, sourceModule: null, lastSynced: null },
+      { type: "services", visible: true, order: 2, sourceModule: "Service Config", lastSynced: "2026-03-16" },
+      { type: "gallery", visible: true, order: 3, sourceModule: "Work Orders", lastSynced: "2026-03-15" },
+      { type: "about", visible: true, order: 4, sourceModule: null, lastSynced: null },
+      { type: "reviews", visible: true, order: 5, sourceModule: null, lastSynced: null },
+      { type: "contact", visible: true, order: 6, sourceModule: "Organization", lastSynced: "2026-03-16" },
+    ],
+    theme: { primaryColor: "#14532d", accentColor: "#22c55e", fontFamily: "Plus Jakarta Sans", darkMode: false },
+    seo: { title: "Green Valley Landscaping | Professional Lawn & Garden", description: "Transform your outdoor space. Design, installation, and maintenance for residential and commercial properties.", ogImage: null },
+    analytics: {
+      pageViews30d: 1560,
+      uniqueVisitors30d: 1120,
+      formSubmissions30d: 18,
+      topPages: [
+        { path: "/", views: 680 },
+        { path: "/gallery", views: 420 },
+        { path: "/services", views: 240 },
+        { path: "/contact", views: 140 },
+        { path: "/about", views: 80 },
+      ],
+      viewsByDay: [
+        { date: "2026-03-12", views: 48 }, { date: "2026-03-13", views: 55 },
+        { date: "2026-03-14", views: 42 }, { date: "2026-03-15", views: 62 },
+        { date: "2026-03-16", views: 38 }, { date: "2026-03-17", views: 58 },
+        { date: "2026-03-18", views: 51 },
+      ],
+    },
+  },
+  {
+    id: "site-4",
+    clientName: "BrightWire Electrical",
+    templateId: "tpl-4",
+    subdomain: "brightwire",
+    customDomain: null,
+    status: "Draft",
+    tier: "Static",
+    publishedAt: null,
+    lastBuildAt: null,
+    createdAt: "2026-03-10",
+    sections: [
+      { type: "hero", visible: true, order: 1, sourceModule: null, lastSynced: null },
+      { type: "services", visible: true, order: 2, sourceModule: null, lastSynced: null },
+      { type: "about", visible: false, order: 3, sourceModule: null, lastSynced: null },
+      { type: "reviews", visible: false, order: 4, sourceModule: null, lastSynced: null },
+      { type: "contact", visible: true, order: 5, sourceModule: "Organization", lastSynced: "2026-03-10" },
+    ],
+    theme: { primaryColor: "#1c1917", accentColor: "#f59e0b", fontFamily: "Inter", darkMode: false },
+    seo: { title: "BrightWire Electrical | Licensed Electricians", description: "Residential and commercial electrical services. Licensed, bonded, insured.", ogImage: null },
+    analytics: {
+      pageViews30d: 0,
+      uniqueVisitors30d: 0,
+      formSubmissions30d: 0,
+      topPages: [],
+      viewsByDay: [],
+    },
+  },
+  {
+    id: "site-5",
+    clientName: "Metro Auto Care",
+    templateId: "tpl-5",
+    subdomain: "metro-auto",
+    customDomain: "www.metroautocarecenter.com",
+    status: "Maintenance",
+    tier: "Portal",
+    publishedAt: "2025-11-20",
+    lastBuildAt: "2026-03-10",
+    createdAt: "2025-10-05",
+    sections: [
+      { type: "hero", visible: true, order: 1, sourceModule: null, lastSynced: null },
+      { type: "services", visible: true, order: 2, sourceModule: "Service Config", lastSynced: "2026-03-10" },
+      { type: "gallery", visible: true, order: 3, sourceModule: "Work Orders", lastSynced: "2026-03-08" },
+      { type: "reviews", visible: true, order: 4, sourceModule: null, lastSynced: null },
+      { type: "about", visible: true, order: 5, sourceModule: null, lastSynced: null },
+      { type: "contact", visible: true, order: 6, sourceModule: "Organization", lastSynced: "2026-03-10" },
+      { type: "map", visible: true, order: 7, sourceModule: "Geo", lastSynced: "2026-03-05" },
+    ],
+    theme: { primaryColor: "#18181b", accentColor: "#ef4444", fontFamily: "Outfit", darkMode: true },
+    seo: { title: "Metro Auto Care | Full-Service Auto Repair", description: "Complete auto repair and maintenance. ASE certified technicians. Fair prices, honest service.", ogImage: null },
+    analytics: {
+      pageViews30d: 3120,
+      uniqueVisitors30d: 2240,
+      formSubmissions30d: 45,
+      topPages: [
+        { path: "/", views: 1380 },
+        { path: "/services", views: 720 },
+        { path: "/gallery", views: 480 },
+        { path: "/contact", views: 310 },
+        { path: "/reviews", views: 230 },
+      ],
+      viewsByDay: [
+        { date: "2026-03-12", views: 95 }, { date: "2026-03-13", views: 108 },
+        { date: "2026-03-14", views: 88 }, { date: "2026-03-15", views: 125 },
+        { date: "2026-03-16", views: 72 }, { date: "2026-03-17", views: 115 },
+        { date: "2026-03-18", views: 102 },
+      ],
+    },
+  },
+];

@@ -366,7 +366,7 @@ The defining feature of A1 Integrations. Agents aren't tools — they're employe
 | P3 | Financial Reporting | Aggregates data from everything else | ✅ Built |
 | P3 | Fleet & Equipment | Valuable but not day-one essential | ✅ Built |
 | P3 | Documents & Knowledge Base | Important for onboarding and compliance, builds over time | ✅ Built |
-| P3 | Website Builder (Tier 1) | Static marketing sites — builds on existing module data | Planned |
+| P3 | Website Builder (Tier 1) | Static marketing sites — builds on existing module data | ✅ Built |
 | P4 | Import & Onboarding (Phase 1-2) | Data migration + guided setup — critical for customer acquisition | Planned |
 | P4 | AI Agents (Phase 1-2) | Helper agent + basic agent employees — the core differentiator | Planned |
 | P4 | Infrastructure & Geo (Phase 3-5) | Incident/compliance tracking, in-house facilities, dispatch layer | Planned |
