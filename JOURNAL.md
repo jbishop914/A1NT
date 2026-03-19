@@ -1263,3 +1263,70 @@ Continuation from Session 12. Twilio webhooks configured, Railway voice server d
 - Live testing of draw tool on deployed site
 
 ---
+
+## Session 14 — March 19, 2026
+
+### Context
+Critical bug-fixing session followed by major Command Center customization. User reported all dashboard subpages crashing when navigated from the Command Center via sidebar, and 3D extrusions never rendering.
+
+### Bug Fixes
+1. **Navigation crash fix** — MapDraw component had no cleanup in its useEffect. When navigating away from Command Center, Mapbox GL Draw event handlers fired against a destroyed map, crashing the React tree. Added proper cleanup: remove event listeners, remove draw control on unmount, wrap map operations in try-catch for teardown safety.
+2. **3D extrusion rendering fix** — `fill-extrusion-opacity` does NOT support data-driven expressions (`["get", "opacity"]`). This silently broke the entire extrusion layer. Changed to static `0.85` opacity per-layer. Added `hexToRgba()` helper to bake per-feature opacity into the color.
+3. **Error boundary** — Added `src/app/dashboard/error.tsx` so crashes show a "Try again" button instead of white screen.
+
+### New Features
+
+#### Map Settings (gear icon)
+- **`map-settings.tsx`** — Gear icon button to the right of Map Objects dropdown
+- Map style selector: Satellite Streets, Satellite, Outdoors/Topo, Streets, Light, Dark, Navigation Day, Navigation Night
+- Label toggle (on/off) — filters Mapbox symbol layers by ID pattern
+- Right-click context menu on map → "Set as Default View" saves lng/lat/zoom/pitch/bearing
+- Reset to Default View button
+
+#### Command Center Settings (in Settings page)
+- **`command-center-store.ts`** — Settings store with localStorage persistence, type definitions for all options
+- **`command-center-provider.tsx`** — React context provider wrapping the dashboard layout
+- **`command-center-settings.tsx`** — Full settings panel in Settings page under "Command Center" section
+
+#### Background Customization
+- **Interactive Map** (default) — live Mapbox map
+- **Static Image** — upload custom background image
+- **Solid Color** — color picker with hex input + live preview
+- **Gradient** — two-color gradient with angle slider (0°–360°) + live preview
+
+#### Logo Overlay
+- Upload company logo image
+- 7-position selector (top-left through bottom-right)
+- Scale slider (10%–200%)
+- Opacity slider (5%–100%)
+- Works on any background mode
+- Enable/disable toggle
+
+#### UI Polish
+- Fixed KPI cards / quick actions overlap (adjusted top offset from `140px` to `155px`)
+- Map search and draw tools only shown in interactive map mode
+- Style changes trigger live map re-styling with source/layer re-creation
+
+### Commits
+- `89fb061` — Fix navigation crash: proper MapboxDraw cleanup + error boundary
+- `6e4d318` — Fix 3D extrusions: fill-extrusion-opacity doesn't support data-driven expressions
+- `xxxxxxx` — Map settings + Command Center background/logo customization
+
+### Files Changed
+- `src/lib/command-center-store.ts` (new) — Settings types, defaults, persistence, style catalogue
+- `src/components/command-center-provider.tsx` (new) — React context provider
+- `src/components/map-settings.tsx` (new) — Gear button with style selector, labels, right-click menu
+- `src/components/command-center-settings.tsx` (new) — Settings page panel
+- `src/components/command-map.tsx` — Reads settings from context, reacts to style/label changes
+- `src/components/map-draw.tsx` — Proper cleanup, extrusion opacity fix
+- `src/app/dashboard/page.tsx` — Background modes, logo overlay, spacing fix
+- `src/app/dashboard/layout.tsx` — Wraps with CommandCenterProvider
+- `src/app/dashboard/settings/page.tsx` — Expandable Command Center section
+- `src/app/dashboard/error.tsx` (new) — Error boundary
+
+### Next Up
+- Test Twilio phone system end-to-end
+- Three.js + Mapbox custom layer for GLB rendering (deferred)
+- Explore additional Mapbox style options / custom styles
+
+---
