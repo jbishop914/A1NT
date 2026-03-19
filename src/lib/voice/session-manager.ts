@@ -41,10 +41,15 @@ const LOG_EVENT_TYPES = [
   "session.updated",
   "response.created",
   "response.done",
+  "response.output_item.added",
+  "response.output_item.done",
   "response.output_audio.done",
+  "response.output_audio_transcript.done",
   "response.function_call_arguments.done",
   "input_audio_buffer.speech_started",
   "input_audio_buffer.speech_stopped",
+  "input_audio_buffer.committed",
+  "conversation.item.created",
   "error",
 ];
 
@@ -160,9 +165,21 @@ export function handleMediaStream(
 
       switch (event.type) {
         /* ── Session configured ──────────────────────────────────── */
+        case "session.created":
+          console.log("[Voice] Session created by OpenAI");
+          break;
+
         case "session.updated":
           console.log("[Voice] Session configured successfully");
           if (session) session.status = "active";
+
+          // Kick off the conversation — tell the AI to greet the caller.
+          // Without this, server_vad waits for user speech first, but
+          // the caller expects the receptionist to speak first.
+          if (openaiWs && openaiWs.readyState === WebSocket.OPEN) {
+            console.log("[Voice] Sending response.create to trigger initial greeting");
+            openaiWs.send(JSON.stringify({ type: "response.create" }));
+          }
           break;
 
         /* ── Audio output from AI → send to Twilio ───────────────── */
@@ -172,7 +189,7 @@ export function handleMediaStream(
               event: "media",
               streamSid,
               media: {
-                payload: Buffer.from(event.delta, "base64").toString("base64"),
+                payload: event.delta, // Already base64 from OpenAI — pass through directly
               },
             };
             twilioWs.send(JSON.stringify(audioDelta));
@@ -288,7 +305,7 @@ export function handleMediaStream(
 
         /* ── Error from OpenAI ───────────────────────────────────── */
         case "error":
-          console.error("[Voice] OpenAI error:", JSON.stringify(event.error));
+          console.error("[Voice] OpenAI error:", JSON.stringify(event, null, 2));
           if (session) session.status = "error";
           break;
       }
