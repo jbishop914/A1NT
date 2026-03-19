@@ -16,7 +16,6 @@ import {
   Layers,
   Box,
   Upload,
-  FileUp,
   RotateCw,
   Move,
   Maximize2,
@@ -27,6 +26,7 @@ import {
   Eye,
   EyeOff,
   Cuboid,
+  Crosshair,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -48,6 +48,8 @@ interface ImportedAsset {
   size: string;
   visible: boolean;
   source: "local" | "kb";
+  /** Blob URL for 3D files so we can re-enter placement */
+  blobUrl?: string;
 }
 
 interface Placed3DObject {
@@ -79,6 +81,12 @@ const COLOR_PRESETS = [
   { label: "Navy", value: "#1e40af" },
   { label: "White", value: "#f1f5f9" },
 ];
+
+// Preview marker source/layer IDs
+const PREVIEW_SOURCE = "placement-preview";
+const PREVIEW_MARKER = "placement-preview-marker";
+const PREVIEW_RING = "placement-preview-ring";
+const PREVIEW_LABEL = "placement-preview-label";
 
 // ─── Component ───────────────────────────────────────────────────
 
@@ -113,6 +121,7 @@ export function MapDraw({ map }: MapDrawProps) {
   const [importedAssets, setImportedAssets] = useState<ImportedAsset[]>([]);
   const [showImportFlow, setShowImportFlow] = useState(false);
   const [importSource, setImportSource] = useState<"local" | "kb" | null>(null);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── 3D placement state ────────────────────────────────────────
@@ -152,6 +161,112 @@ export function MapDraw({ map }: MapDrawProps) {
     [map],
   );
 
+  // ── Live preview marker for 3D placement ──────────────────────
+
+  const updatePreviewMarker = useCallback(
+    (obj: Placed3DObject | null) => {
+      if (!map) return;
+
+      if (!obj) {
+        // Remove preview layers + source
+        if (map.getLayer(PREVIEW_LABEL)) map.removeLayer(PREVIEW_LABEL);
+        if (map.getLayer(PREVIEW_RING)) map.removeLayer(PREVIEW_RING);
+        if (map.getLayer(PREVIEW_MARKER)) map.removeLayer(PREVIEW_MARKER);
+        if (map.getSource(PREVIEW_SOURCE)) map.removeSource(PREVIEW_SOURCE);
+        return;
+      }
+
+      const data: GeoJSON.Feature = {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [obj.lng, obj.lat] },
+        properties: { name: obj.name, scale: obj.scale, rotation: Math.round((obj.rotateZ * 180) / Math.PI) },
+      };
+
+      if (map.getSource(PREVIEW_SOURCE)) {
+        (map.getSource(PREVIEW_SOURCE) as mapboxgl.GeoJSONSource).setData(data);
+      } else {
+        map.addSource(PREVIEW_SOURCE, { type: "geojson", data });
+
+        // Outer pulsing ring
+        map.addLayer({
+          id: PREVIEW_RING,
+          type: "circle",
+          source: PREVIEW_SOURCE,
+          paint: {
+            "circle-radius": 18,
+            "circle-color": "transparent",
+            "circle-stroke-color": "#8b5cf6",
+            "circle-stroke-width": 2,
+            "circle-stroke-opacity": 0.5,
+          },
+        });
+
+        // Inner dot
+        map.addLayer({
+          id: PREVIEW_MARKER,
+          type: "circle",
+          source: PREVIEW_SOURCE,
+          paint: {
+            "circle-radius": 8,
+            "circle-color": "#8b5cf6",
+            "circle-stroke-color": "#fff",
+            "circle-stroke-width": 2,
+            "circle-opacity": 0.9,
+          },
+        });
+
+        // Label
+        map.addLayer({
+          id: PREVIEW_LABEL,
+          type: "symbol",
+          source: PREVIEW_SOURCE,
+          layout: {
+            "text-field": ["get", "name"],
+            "text-offset": [0, 2],
+            "text-size": 11,
+            "text-anchor": "top",
+            "text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"],
+          },
+          paint: {
+            "text-color": "#c4b5fd",
+            "text-halo-color": "#000",
+            "text-halo-width": 1,
+          },
+        });
+      }
+    },
+    [map],
+  );
+
+  // Keep preview marker in sync with placingObject
+  useEffect(() => {
+    updatePreviewMarker(placingObject);
+    return () => {
+      // Clean up on unmount / placement end
+      if (!placingObject) updatePreviewMarker(null);
+    };
+  }, [placingObject, updatePreviewMarker]);
+
+  // Also allow clicking on the map to reposition during placement
+  useEffect(() => {
+    if (!map || !placementMode) return;
+
+    function onMapClick(e: mapboxgl.MapMouseEvent) {
+      setPlacingObject((prev) => {
+        if (!prev) return prev;
+        return { ...prev, lng: e.lngLat.lng, lat: e.lngLat.lat };
+      });
+    }
+
+    map.on("click", onMapClick);
+    map.getCanvas().style.cursor = "crosshair";
+
+    return () => {
+      map.off("click", onMapClick);
+      map.getCanvas().style.cursor = "";
+    };
+  }, [map, placementMode]);
+
   // Initialize Mapbox GL Draw
   useEffect(() => {
     if (!map || drawLoaded) return;
@@ -178,89 +293,53 @@ export function MapDraw({ map }: MapDrawProps) {
           controls: {},
           defaultMode: "simple_select",
           styles: [
-            // Polygon fill — active
             {
               id: "gl-draw-polygon-fill-active",
               type: "fill",
               filter: ["all", ["==", "$type", "Polygon"], ["==", "active", "true"]],
-              paint: {
-                "fill-color": "#10b981",
-                "fill-opacity": 0.3,
-              },
+              paint: { "fill-color": "#10b981", "fill-opacity": 0.3 },
             },
-            // Polygon fill — inactive
             {
               id: "gl-draw-polygon-fill-inactive",
               type: "fill",
               filter: ["all", ["==", "$type", "Polygon"], ["==", "active", "false"]],
-              paint: {
-                "fill-color": "#94a3b8",
-                "fill-opacity": 0.2,
-              },
+              paint: { "fill-color": "#94a3b8", "fill-opacity": 0.2 },
             },
-            // Polygon stroke — active
             {
               id: "gl-draw-polygon-stroke-active",
               type: "line",
               filter: ["all", ["==", "$type", "Polygon"], ["==", "active", "true"]],
-              paint: {
-                "line-color": "#10b981",
-                "line-width": 2,
-              },
+              paint: { "line-color": "#10b981", "line-width": 2 },
             },
-            // Polygon stroke — inactive
             {
               id: "gl-draw-polygon-stroke-inactive",
               type: "line",
               filter: ["all", ["==", "$type", "Polygon"], ["==", "active", "false"]],
-              paint: {
-                "line-color": "#94a3b8",
-                "line-width": 1.5,
-                "line-dasharray": [2, 2],
-              },
+              paint: { "line-color": "#94a3b8", "line-width": 1.5, "line-dasharray": [2, 2] },
             },
-            // Line — active
             {
               id: "gl-draw-line-active",
               type: "line",
               filter: ["all", ["==", "$type", "LineString"], ["==", "active", "true"]],
-              paint: {
-                "line-color": "#10b981",
-                "line-width": 2,
-              },
+              paint: { "line-color": "#10b981", "line-width": 2 },
             },
-            // Line — inactive
             {
               id: "gl-draw-line-inactive",
               type: "line",
               filter: ["all", ["==", "$type", "LineString"], ["==", "active", "false"]],
-              paint: {
-                "line-color": "#94a3b8",
-                "line-width": 1.5,
-              },
+              paint: { "line-color": "#94a3b8", "line-width": 1.5 },
             },
-            // Vertex points
             {
               id: "gl-draw-point",
               type: "circle",
               filter: ["all", ["==", "$type", "Point"], ["==", "meta", "vertex"]],
-              paint: {
-                "circle-radius": 4,
-                "circle-color": "#fff",
-                "circle-stroke-color": "#10b981",
-                "circle-stroke-width": 2,
-              },
+              paint: { "circle-radius": 4, "circle-color": "#fff", "circle-stroke-color": "#10b981", "circle-stroke-width": 2 },
             },
-            // Midpoints
             {
               id: "gl-draw-point-midpoint",
               type: "circle",
               filter: ["all", ["==", "$type", "Point"], ["==", "meta", "midpoint"]],
-              paint: {
-                "circle-radius": 3,
-                "circle-color": "#10b981",
-                "circle-opacity": 0.5,
-              },
+              paint: { "circle-radius": 3, "circle-color": "#10b981", "circle-opacity": 0.5 },
             },
           ],
         });
@@ -269,7 +348,6 @@ export function MapDraw({ map }: MapDrawProps) {
         drawRef.current = draw;
         setDrawLoaded(true);
 
-        // Listen for draw events
         map.on("draw.create", handleDrawCreate);
         map.on("draw.update", handleDrawUpdate);
         map.on("draw.delete", handleDrawDelete);
@@ -309,7 +387,6 @@ export function MapDraw({ map }: MapDrawProps) {
     setFeatures(merged);
     setActiveTool(null);
 
-    // Immediately show extrusion panel for the new shape
     if (newFeatures.length > 0) {
       setSelectedFeature(newFeatures[0]);
       setShowExtrusion(true);
@@ -319,7 +396,6 @@ export function MapDraw({ map }: MapDrawProps) {
   }
 
   function handleDrawUpdate() {
-    // Geometry changed — re-render extrusions
     syncExtrusions(featuresRef.current);
   }
 
@@ -422,6 +498,8 @@ export function MapDraw({ map }: MapDrawProps) {
 
       if (!is3d && !is2d) return;
 
+      const blobUrl = is3d ? URL.createObjectURL(file) : undefined;
+
       const asset: ImportedAsset = {
         id: `import-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         name: file.name,
@@ -430,14 +508,18 @@ export function MapDraw({ map }: MapDrawProps) {
         size: formatFileSize(file.size),
         visible: true,
         source: "local",
+        blobUrl,
       };
 
       setImportedAssets((prev) => [...prev, asset]);
 
-      // If it's a GLB/GLTF, enter placement mode
-      if (["glb", "gltf"].includes(ext)) {
-        const url = URL.createObjectURL(file);
-        enterPlacementMode(asset.name, url);
+      // If it's a GLB/GLTF, automatically enter placement mode
+      if (["glb", "gltf"].includes(ext) && blobUrl) {
+        // Close the dropdown so placement panel is visible
+        setShowImportMenu(false);
+        setShowImportFlow(false);
+        setImportSource(null);
+        enterPlacementMode(asset.name, blobUrl);
       }
 
       // If it's GeoJSON, load it onto the map
@@ -457,14 +539,16 @@ export function MapDraw({ map }: MapDrawProps) {
 
     // Reset input so the same file can be re-selected
     e.target.value = "";
-    setShowImportFlow(false);
-    setImportSource(null);
+    // Only close import flow if not entering placement mode (handled above for 3D)
+    if (!Array.from(files).some((f) => ["glb", "gltf"].includes(f.name.split(".").pop()?.toLowerCase() ?? ""))) {
+      setShowImportFlow(false);
+      setImportSource(null);
+    }
   }
 
   function addGeoJSONToMap(sourceId: string, geojson: GeoJSON.FeatureCollection | GeoJSON.Feature) {
     if (!map) return;
 
-    // Wrap single feature in a collection
     const fc: GeoJSON.FeatureCollection =
       geojson.type === "FeatureCollection"
         ? geojson
@@ -473,48 +557,33 @@ export function MapDraw({ map }: MapDrawProps) {
     if (!map.getSource(sourceId)) {
       map.addSource(sourceId, { type: "geojson", data: fc });
 
-      // Auto-detect geometry type and add appropriate layer
       const firstGeom = fc.features[0]?.geometry?.type;
       if (firstGeom === "Polygon" || firstGeom === "MultiPolygon") {
         map.addLayer({
           id: `${sourceId}-fill`,
           type: "fill",
           source: sourceId,
-          paint: {
-            "fill-color": "#10b981",
-            "fill-opacity": 0.3,
-          },
+          paint: { "fill-color": "#10b981", "fill-opacity": 0.3 },
         });
         map.addLayer({
           id: `${sourceId}-stroke`,
           type: "line",
           source: sourceId,
-          paint: {
-            "line-color": "#10b981",
-            "line-width": 1.5,
-          },
+          paint: { "line-color": "#10b981", "line-width": 1.5 },
         });
       } else if (firstGeom === "LineString" || firstGeom === "MultiLineString") {
         map.addLayer({
           id: `${sourceId}-line`,
           type: "line",
           source: sourceId,
-          paint: {
-            "line-color": "#10b981",
-            "line-width": 2,
-          },
+          paint: { "line-color": "#10b981", "line-width": 2 },
         });
       } else if (firstGeom === "Point" || firstGeom === "MultiPoint") {
         map.addLayer({
           id: `${sourceId}-circle`,
           type: "circle",
           source: sourceId,
-          paint: {
-            "circle-radius": 5,
-            "circle-color": "#10b981",
-            "circle-stroke-color": "#fff",
-            "circle-stroke-width": 1,
-          },
+          paint: { "circle-radius": 5, "circle-color": "#10b981", "circle-stroke-color": "#fff", "circle-stroke-width": 1 },
         });
       }
     }
@@ -530,7 +599,7 @@ export function MapDraw({ map }: MapDrawProps) {
       lng: center.lng,
       lat: center.lat,
       altitude: 0,
-      rotateX: Math.PI / 2, // upright
+      rotateX: Math.PI / 2,
       rotateY: 0,
       rotateZ: 0,
       scale: 1,
@@ -540,27 +609,44 @@ export function MapDraw({ map }: MapDrawProps) {
     setPlacementTool("move");
   }
 
+  function handlePlaceSelectedAsset() {
+    // Find the selected 3D asset from the table
+    const asset = selectedAssetId
+      ? importedAssets.find((a) => a.id === selectedAssetId && a.type === "3d")
+      : null;
+
+    if (asset && asset.blobUrl) {
+      setShowImportMenu(false);
+      enterPlacementMode(asset.name, asset.blobUrl);
+    } else {
+      // No 3D asset selected — find the first 3D asset
+      const first3d = importedAssets.find((a) => a.type === "3d" && a.blobUrl);
+      if (first3d && first3d.blobUrl) {
+        setShowImportMenu(false);
+        enterPlacementMode(first3d.name, first3d.blobUrl);
+      }
+      // If no 3D assets at all, do nothing (button will be disabled)
+    }
+  }
+
   function confirmPlacement() {
     if (!placingObject) return;
     setPlaced3DObjects((prev) => [...prev, placingObject]);
-    // In production, this would add a Three.js custom layer to Mapbox
-    // For now, add a marker at the placement location
+    // Clean up preview marker and add permanent marker
+    updatePreviewMarker(null);
     addPlacementMarker(placingObject);
     setPlacingObject(null);
     setPlacementMode(false);
   }
 
   function cancelPlacement() {
-    if (placingObject?.url.startsWith("blob:")) {
-      URL.revokeObjectURL(placingObject.url);
-    }
+    updatePreviewMarker(null);
     setPlacingObject(null);
     setPlacementMode(false);
   }
 
   function addPlacementMarker(obj: Placed3DObject) {
     if (!map) return;
-    // Add a source + symbol for the 3D object location
     const sourceId = `placed-${obj.id}`;
     if (!map.getSource(sourceId)) {
       map.addSource(sourceId, {
@@ -568,7 +654,7 @@ export function MapDraw({ map }: MapDrawProps) {
         data: {
           type: "Feature",
           geometry: { type: "Point", coordinates: [obj.lng, obj.lat] },
-          properties: { name: obj.name },
+          properties: { name: obj.name, scale: obj.scale },
         },
       });
       map.addLayer({
@@ -606,11 +692,10 @@ export function MapDraw({ map }: MapDrawProps) {
     setImportedAssets((prev) =>
       prev.map((a) => (a.id === id ? { ...a, visible: !a.visible } : a)),
     );
-    // Toggle associated map layers
     if (!map) return;
     const asset = importedAssets.find((a) => a.id === id);
     if (!asset) return;
-    const vis = asset.visible ? "none" : "visible"; // toggling, so invert current
+    const vis = asset.visible ? "none" : "visible";
     const layerIds = map.getStyle().layers
       ?.filter((l) => (l as { source?: string }).source === id)
       .map((l) => l.id) ?? [];
@@ -620,8 +705,10 @@ export function MapDraw({ map }: MapDrawProps) {
   }
 
   function removeAsset(id: string) {
+    const asset = importedAssets.find((a) => a.id === id);
+    if (asset?.blobUrl) URL.revokeObjectURL(asset.blobUrl);
     setImportedAssets((prev) => prev.filter((a) => a.id !== id));
-    // Remove associated map layers + source
+    if (selectedAssetId === id) setSelectedAssetId(null);
     if (!map) return;
     const layerIds = map.getStyle().layers
       ?.filter((l) => (l as { source?: string }).source === id)
@@ -639,6 +726,8 @@ export function MapDraw({ map }: MapDrawProps) {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
+
+  const has3dAssets = importedAssets.some((a) => a.type === "3d" && a.blobUrl);
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -663,7 +752,13 @@ export function MapDraw({ map }: MapDrawProps) {
               <Cuboid className="w-3.5 h-3.5 text-violet-400" />
               <span className="text-xs font-medium text-white/80">Place 3D Object</span>
             </div>
-            <span className="text-[10px] text-white/40 truncate max-w-[120px]">{placingObject.name}</span>
+            <span className="text-[10px] text-white/40 truncate max-w-[140px]">{placingObject.name}</span>
+          </div>
+
+          {/* Click-to-place hint */}
+          <div className="flex items-center gap-2 bg-violet-500/10 rounded-md px-2.5 py-1.5 border border-violet-500/15">
+            <Crosshair className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+            <span className="text-[10px] text-violet-300/80">Click on the map to position, or adjust coordinates below</span>
           </div>
 
           {/* Transform tools */}
@@ -803,7 +898,7 @@ export function MapDraw({ map }: MapDrawProps) {
         </div>
       )}
 
-      {/* ── Draw toggle button ── */}
+      {/* ── Draw toggle button + Import 2D/3D ── */}
       <div className="flex items-center gap-1.5">
         <button
           onClick={() => setIsOpen(!isOpen)}
@@ -830,7 +925,13 @@ export function MapDraw({ map }: MapDrawProps) {
         {/* ── Import 2D/3D dropdown ── */}
         <div className="relative">
           <button
-            onClick={() => setShowImportMenu(!showImportMenu)}
+            onClick={() => {
+              setShowImportMenu(!showImportMenu);
+              if (showImportMenu) {
+                setShowImportFlow(false);
+                setImportSource(null);
+              }
+            }}
             className={`
               flex items-center gap-1.5 bg-black/50 backdrop-blur-xl rounded-lg border px-2.5 py-1.5 text-xs transition-all
               ${showImportMenu ? "border-violet-500/30 text-violet-400 bg-black/60" : "border-white/[0.08] text-white/60 hover:text-white hover:bg-black/60"}
@@ -852,7 +953,7 @@ export function MapDraw({ map }: MapDrawProps) {
           </button>
 
           {showImportMenu && (
-            <div className="absolute top-full left-0 mt-1 w-[320px] bg-black/70 backdrop-blur-xl rounded-lg border border-white/[0.08] p-2 space-y-2 z-50">
+            <div className="absolute top-full left-0 mt-1 w-[340px] bg-black/70 backdrop-blur-xl rounded-lg border border-white/[0.08] p-2 space-y-2 z-50">
               {/* Import actions */}
               <div className="flex items-center gap-1.5">
                 <button
@@ -867,13 +968,19 @@ export function MapDraw({ map }: MapDrawProps) {
                   Add File
                 </button>
                 <button
-                  onClick={() => enterPlacementMode("Custom Object", "")}
-                  disabled={!map}
-                  className="flex items-center gap-1.5 bg-white/[0.06] text-white/50 rounded-md px-2.5 py-1.5 text-[10px] font-medium hover:bg-white/[0.1] hover:text-white/70 transition-all border border-white/[0.08] disabled:opacity-30"
+                  onClick={handlePlaceSelectedAsset}
+                  disabled={!has3dAssets}
+                  className={`
+                    flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-medium transition-all border
+                    ${has3dAssets
+                      ? "bg-white/[0.06] text-white/60 hover:bg-violet-500/15 hover:text-violet-400 hover:border-violet-500/20 border-white/[0.08]"
+                      : "bg-white/[0.03] text-white/20 border-white/[0.05] cursor-not-allowed"}
+                  `}
+                  title={has3dAssets ? "Place selected 3D asset on map" : "Import a 3D file first (GLB, GLTF)"}
                   data-testid="import-place-3d"
                 >
                   <Cuboid className="w-3 h-3" />
-                  Place 3D Object
+                  Place on Map
                 </button>
               </div>
 
@@ -943,7 +1050,14 @@ export function MapDraw({ map }: MapDrawProps) {
                     importedAssets.slice(0, 10).map((asset) => (
                       <div
                         key={asset.id}
-                        className="grid grid-cols-[1fr_50px_50px_28px_28px] gap-1 items-center px-1.5 py-1 rounded-md hover:bg-white/[0.04] transition-colors group"
+                        onClick={() => setSelectedAssetId(asset.id === selectedAssetId ? null : asset.id)}
+                        className={`
+                          grid grid-cols-[1fr_50px_50px_28px_28px] gap-1 items-center px-1.5 py-1.5 rounded-md transition-colors group cursor-pointer
+                          ${selectedAssetId === asset.id
+                            ? "bg-violet-500/10 border border-violet-500/20"
+                            : "hover:bg-white/[0.04] border border-transparent"}
+                        `}
+                        data-testid={`asset-row-${asset.id}`}
                       >
                         <div className="flex items-center gap-1.5 min-w-0">
                           {asset.type === "3d" ? (
@@ -956,14 +1070,20 @@ export function MapDraw({ map }: MapDrawProps) {
                         <span className="text-[9px] font-mono text-white/30">{asset.format}</span>
                         <span className="text-[9px] font-mono text-white/30">{asset.size}</span>
                         <button
-                          onClick={() => toggleAssetVisibility(asset.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleAssetVisibility(asset.id);
+                          }}
                           className="w-6 h-6 rounded flex items-center justify-center text-white/20 hover:text-white/50 transition-colors"
                           title={asset.visible ? "Hide" : "Show"}
                         >
                           {asset.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                         </button>
                         <button
-                          onClick={() => removeAsset(asset.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeAsset(asset.id);
+                          }}
                           className="w-6 h-6 rounded flex items-center justify-center text-white/20 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
                           title="Remove"
                         >
@@ -974,7 +1094,6 @@ export function MapDraw({ map }: MapDrawProps) {
                   )}
                 </div>
 
-                {/* Show more indicator */}
                 {importedAssets.length > 10 && (
                   <div className="text-[9px] text-white/25 text-center py-1">
                     +{importedAssets.length - 10} more assets
@@ -1018,7 +1137,6 @@ export function MapDraw({ map }: MapDrawProps) {
 
             <div className="w-px h-5 bg-white/[0.08] mx-0.5" />
 
-            {/* Delete selected */}
             <button
               onClick={deleteSelected}
               disabled={!selectedFeature}
@@ -1029,7 +1147,6 @@ export function MapDraw({ map }: MapDrawProps) {
               <Trash2 className="w-3.5 h-3.5" />
             </button>
 
-            {/* Clear all */}
             {features.length > 0 && (
               <button
                 onClick={deleteAll}
@@ -1051,7 +1168,6 @@ export function MapDraw({ map }: MapDrawProps) {
                 </span>
               </div>
 
-              {/* Color row */}
               <div className="flex items-center gap-1.5">
                 <Palette className="w-3 h-3 text-white/30 shrink-0" />
                 <div className="flex gap-1">
@@ -1071,7 +1187,6 @@ export function MapDraw({ map }: MapDrawProps) {
                 </div>
               </div>
 
-              {/* Height slider */}
               <div className="flex items-center gap-2">
                 <ArrowUp className="w-3 h-3 text-white/30 shrink-0" />
                 <input
@@ -1089,7 +1204,6 @@ export function MapDraw({ map }: MapDrawProps) {
                 </span>
               </div>
 
-              {/* Opacity slider */}
               <div className="flex items-center gap-2">
                 <Layers className="w-3 h-3 text-white/30 shrink-0" />
                 <input
@@ -1121,7 +1235,6 @@ export function MapDraw({ map }: MapDrawProps) {
                 </div>
               </div>
 
-              {/* Color row */}
               <div className="flex items-center gap-1.5">
                 <Palette className="w-3 h-3 text-white/30 shrink-0" />
                 <div className="flex gap-1">
@@ -1141,7 +1254,6 @@ export function MapDraw({ map }: MapDrawProps) {
                 </div>
               </div>
 
-              {/* Height slider */}
               <div className="flex items-center gap-2">
                 <ArrowUp className="w-3 h-3 text-white/30 shrink-0" />
                 <input
@@ -1159,7 +1271,6 @@ export function MapDraw({ map }: MapDrawProps) {
                 </span>
               </div>
 
-              {/* Opacity slider */}
               <div className="flex items-center gap-2">
                 <Layers className="w-3 h-3 text-white/30 shrink-0" />
                 <input
@@ -1179,7 +1290,6 @@ export function MapDraw({ map }: MapDrawProps) {
             </div>
           )}
 
-          {/* Feature count */}
           {features.length > 0 && (
             <div className="flex items-center justify-between pt-1 border-t border-white/[0.06]">
               <span className="text-[9px] text-white/30">
