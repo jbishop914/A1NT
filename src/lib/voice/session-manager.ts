@@ -23,7 +23,6 @@ import type {
   TwilioStartEvent,
   TwilioMediaEvent,
   ToolCallRecord,
-  OpenAISessionUpdate,
   VoicePreset,
 } from "./types";
 import { AGENT_TOOLS, executeToolCall } from "./tools";
@@ -102,10 +101,11 @@ export function handleMediaStream(
   console.log("[Voice] Twilio WebSocket connected — initializing session");
 
   /* ─── Open OpenAI Realtime WebSocket ────────────────────────────── */
-  const openaiUrl = `${OPENAI_REALTIME_URL}?model=${model}&temperature=${temperature}`;
+  const openaiUrl = `${OPENAI_REALTIME_URL}?model=${model}`;
   openaiWs = new WebSocket(openaiUrl, {
     headers: {
       Authorization: `Bearer ${openaiKey}`,
+      "OpenAI-Beta": "realtime=v1",
     },
   });
 
@@ -121,22 +121,22 @@ export function handleMediaStream(
       const systemPrompt =
         config?.systemPrompt ?? buildDefaultPrompt(session?.callerNumber ?? "unknown");
 
-      const sessionUpdate: OpenAISessionUpdate = {
+      // OpenAI Realtime API session.update — flat structure per API spec
+      // Model is set via URL param, NOT in session.update
+      // Audio format: g711_ulaw = Twilio's native µ-law encoding (no transcoding needed)
+      const sessionUpdate = {
         type: "session.update",
         session: {
-          type: "realtime",
-          model,
-          output_modalities: ["audio"],
-          audio: {
-            input: {
-              format: { type: "audio/pcmu" },
-              turn_detection: { type: "server_vad" },
-            },
-            output: {
-              format: { type: "audio/pcmu" },
-              voice,
-            },
+          modalities: ["text", "audio"],
+          input_audio_format: "g711_ulaw",
+          output_audio_format: "g711_ulaw",
+          input_audio_transcription: { model: "gpt-4o-mini-transcribe" },
+          turn_detection: {
+            type: "server_vad",
+            prefix_padding_ms: 300,
+            silence_duration_ms: 500,
           },
+          voice,
           instructions: systemPrompt,
           tools,
           temperature,

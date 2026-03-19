@@ -153,27 +153,8 @@ export interface TwilioMarkEvent {
 
 /* ─── OpenAI Realtime Events (subset we care about) ─────────────────────── */
 
-export interface OpenAISessionUpdate {
-  type: "session.update";
-  session: {
-    type: "realtime";
-    model: string;
-    output_modalities: string[];
-    audio: {
-      input: {
-        format: { type: AudioFormat };
-        turn_detection: { type: string };
-      };
-      output: {
-        format: { type: AudioFormat };
-        voice: VoicePreset;
-      };
-    };
-    instructions: string;
-    tools?: RealtimeTool[];
-    temperature?: number;
-  };
-}
+/** Valid audio format strings for OpenAI Realtime API */
+export type OpenAIAudioFormat = "pcm16" | "g711_ulaw" | "g711_alaw";
 
 export interface OpenAIAudioDelta {
   type: "response.output_audio.delta";
