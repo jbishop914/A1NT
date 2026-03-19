@@ -159,25 +159,29 @@ export function MapDraw({ map }: MapDrawProps) {
   const syncExtrusions = useCallback(
     (featuresMeta: DrawnFeature[]) => {
       if (!map || !drawRef.current) return;
-      const source = map.getSource("user-extrusions") as mapboxgl.GeoJSONSource | undefined;
-      if (!source) return;
+      try {
+        const source = map.getSource("user-extrusions") as mapboxgl.GeoJSONSource | undefined;
+        if (!source) return;
 
-      const allDrawn = drawRef.current.getAll();
-      const extrusionFeatures = allDrawn.features.map((f) => {
-        const meta = featuresMeta.find((m) => m.id === f.id);
-        return {
-          ...f,
-          properties: {
-            ...f.properties,
-            height: meta?.visible === false ? 0 : (meta?.height ?? shapeHeightRef.current),
-            base: meta?.base ?? 0,
-            color: meta?.color ?? shapeColorRef.current,
-            opacity: meta?.visible === false ? 0 : (meta?.opacity ?? shapeOpacityRef.current),
-          },
-        };
-      });
+        const allDrawn = drawRef.current.getAll();
+        const extrusionFeatures = allDrawn.features.map((f) => {
+          const meta = featuresMeta.find((m) => m.id === f.id);
+          return {
+            ...f,
+            properties: {
+              ...f.properties,
+              height: meta?.visible === false ? 0 : (meta?.height ?? shapeHeightRef.current),
+              base: meta?.base ?? 0,
+              color: meta?.color ?? shapeColorRef.current,
+              opacity: meta?.visible === false ? 0 : (meta?.opacity ?? shapeOpacityRef.current),
+            },
+          };
+        });
 
-      source.setData({ type: "FeatureCollection", features: extrusionFeatures });
+        source.setData({ type: "FeatureCollection", features: extrusionFeatures });
+      } catch {
+        // Map may be destroyed during navigation teardown
+      }
     },
     [map],
   );
@@ -187,27 +191,31 @@ export function MapDraw({ map }: MapDrawProps) {
   const updatePreviewMarker = useCallback(
     (obj: Placed3DObject | null) => {
       if (!map) return;
-      if (!obj) {
-        if (map.getLayer(PREVIEW_LABEL)) map.removeLayer(PREVIEW_LABEL);
-        if (map.getLayer(PREVIEW_RING)) map.removeLayer(PREVIEW_RING);
-        if (map.getLayer(PREVIEW_MARKER)) map.removeLayer(PREVIEW_MARKER);
-        if (map.getSource(PREVIEW_SOURCE)) map.removeSource(PREVIEW_SOURCE);
-        return;
-      }
+      try {
+        if (!obj) {
+          if (map.getLayer(PREVIEW_LABEL)) map.removeLayer(PREVIEW_LABEL);
+          if (map.getLayer(PREVIEW_RING)) map.removeLayer(PREVIEW_RING);
+          if (map.getLayer(PREVIEW_MARKER)) map.removeLayer(PREVIEW_MARKER);
+          if (map.getSource(PREVIEW_SOURCE)) map.removeSource(PREVIEW_SOURCE);
+          return;
+        }
 
-      const data: GeoJSON.Feature = {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [obj.lng, obj.lat] },
-        properties: { name: obj.name },
-      };
+        const data: GeoJSON.Feature = {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [obj.lng, obj.lat] },
+          properties: { name: obj.name },
+        };
 
-      if (map.getSource(PREVIEW_SOURCE)) {
-        (map.getSource(PREVIEW_SOURCE) as mapboxgl.GeoJSONSource).setData(data);
-      } else {
-        map.addSource(PREVIEW_SOURCE, { type: "geojson", data });
-        map.addLayer({ id: PREVIEW_RING, type: "circle", source: PREVIEW_SOURCE, paint: { "circle-radius": 18, "circle-color": "transparent", "circle-stroke-color": "#8b5cf6", "circle-stroke-width": 2, "circle-stroke-opacity": 0.5 } });
-        map.addLayer({ id: PREVIEW_MARKER, type: "circle", source: PREVIEW_SOURCE, paint: { "circle-radius": 8, "circle-color": "#8b5cf6", "circle-stroke-color": "#fff", "circle-stroke-width": 2, "circle-opacity": 0.9 } });
-        map.addLayer({ id: PREVIEW_LABEL, type: "symbol", source: PREVIEW_SOURCE, layout: { "text-field": ["get", "name"], "text-offset": [0, 2], "text-size": 11, "text-anchor": "top", "text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"] }, paint: { "text-color": "#c4b5fd", "text-halo-color": "#000", "text-halo-width": 1 } });
+        if (map.getSource(PREVIEW_SOURCE)) {
+          (map.getSource(PREVIEW_SOURCE) as mapboxgl.GeoJSONSource).setData(data);
+        } else {
+          map.addSource(PREVIEW_SOURCE, { type: "geojson", data });
+          map.addLayer({ id: PREVIEW_RING, type: "circle", source: PREVIEW_SOURCE, paint: { "circle-radius": 18, "circle-color": "transparent", "circle-stroke-color": "#8b5cf6", "circle-stroke-width": 2, "circle-stroke-opacity": 0.5 } });
+          map.addLayer({ id: PREVIEW_MARKER, type: "circle", source: PREVIEW_SOURCE, paint: { "circle-radius": 8, "circle-color": "#8b5cf6", "circle-stroke-color": "#fff", "circle-stroke-width": 2, "circle-opacity": 0.9 } });
+          map.addLayer({ id: PREVIEW_LABEL, type: "symbol", source: PREVIEW_SOURCE, layout: { "text-field": ["get", "name"], "text-offset": [0, 2], "text-size": 11, "text-anchor": "top", "text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"] }, paint: { "text-color": "#c4b5fd", "text-halo-color": "#000", "text-halo-width": 1 } });
+        }
+      } catch {
+        // Map may be in the process of being destroyed during navigation — safe to ignore
       }
     },
     [map],
@@ -226,7 +234,14 @@ export function MapDraw({ map }: MapDrawProps) {
     }
     map.on("click", onMapClick);
     map.getCanvas().style.cursor = "crosshair";
-    return () => { map.off("click", onMapClick); map.getCanvas().style.cursor = ""; };
+    return () => {
+      try {
+        map.off("click", onMapClick);
+        map.getCanvas().style.cursor = "";
+      } catch {
+        // Map may already be destroyed during navigation
+      }
+    };
   }, [map, placementMode]);
 
   // ── Initialize Mapbox GL Draw ─────────────────────────────────
@@ -276,7 +291,25 @@ export function MapDraw({ map }: MapDrawProps) {
     }
 
     initDraw();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // ── Critical cleanup: remove draw control + event listeners ──
+      // Without this, navigating away from Command Center crashes
+      // because Mapbox Draw event handlers fire on a destroyed map.
+      if (drawRef.current && map) {
+        try {
+          map.off("draw.create", handleDrawCreate);
+          map.off("draw.update", handleDrawUpdate);
+          map.off("draw.delete", handleDrawDelete);
+          map.off("draw.selectionchange", handleSelectionChange);
+          map.removeControl(drawRef.current as unknown as mapboxgl.IControl);
+        } catch {
+          // Map may already be destroyed — safe to ignore
+        }
+        drawRef.current = null;
+        setDrawLoaded(false);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map]);
 
