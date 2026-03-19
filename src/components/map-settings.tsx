@@ -41,9 +41,34 @@ export function MapSettings({ map }: MapSettingsProps) {
   }, [open]);
 
   // ── Right-click handler on map ──────────────────────────────
+  // Mapbox uses right-click-drag to adjust pitch/bearing, so we
+  // only show the context menu when the user right-clicks WITHOUT
+  // dragging (< 4px movement, < 300ms hold).
+  const rightDownRef = useRef<{ x: number; y: number; t: number } | null>(null);
+
   useEffect(() => {
     if (!map) return;
+    const canvas = map.getCanvas();
+
+    function onMouseDown(e: MouseEvent) {
+      if (e.button === 2) {
+        rightDownRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+      }
+    }
+
     function onContextMenu(e: mapboxgl.MapMouseEvent & { originalEvent: MouseEvent }) {
+      const down = rightDownRef.current;
+      rightDownRef.current = null;
+      if (!down) return;
+
+      const dx = e.originalEvent.clientX - down.x;
+      const dy = e.originalEvent.clientY - down.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const duration = Date.now() - down.t;
+
+      // If user dragged or held too long, it's a pitch/bearing gesture — skip menu
+      if (dist > 4 || duration > 400) return;
+
       e.originalEvent.preventDefault();
       setCtxMenu({
         x: e.originalEvent.clientX,
@@ -52,17 +77,31 @@ export function MapSettings({ map }: MapSettingsProps) {
         lat: e.lngLat.lat,
       });
     }
+
+    canvas.addEventListener("mousedown", onMouseDown);
     map.on("contextmenu", onContextMenu);
-    return () => { map.off("contextmenu", onContextMenu); };
+    return () => {
+      canvas.removeEventListener("mousedown", onMouseDown);
+      map.off("contextmenu", onContextMenu);
+    };
   }, [map]);
 
-  // Close context menu on click anywhere
+  // Close context menu on any click or scroll
   useEffect(() => {
     if (!ctxMenu) return;
     function close() { setCtxMenu(null); }
-    window.addEventListener("click", close);
-    window.addEventListener("contextmenu", close);
-    return () => { window.removeEventListener("click", close); window.removeEventListener("contextmenu", close); };
+    // Small delay so the context menu doesn't close from the same right-click
+    const timer = setTimeout(() => {
+      window.addEventListener("mousedown", close);
+      window.addEventListener("contextmenu", close);
+      window.addEventListener("wheel", close);
+    }, 50);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("contextmenu", close);
+      window.removeEventListener("wheel", close);
+    };
   }, [ctxMenu]);
 
   const setDefaultView = useCallback(() => {
