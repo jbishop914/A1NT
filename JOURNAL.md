@@ -1159,3 +1159,107 @@ Phase 1B — Voice Pipeline Foundation. Josh provided Twilio API credentials (Ac
 - **Phase 6 — Director of AR:** Meta-agent for continuous review and improvement proposals
 
 ---
+
+## Session 13 — March 19, 2026
+
+### Context
+Continuation from Session 12. Twilio webhooks configured, Railway voice server deployed and active, Vercel build deployed. Focus this session: map draw tool bug fixes, Import 2D/3D system, and 3D object placement mode.
+
+### Goals
+1. Fix stale closure bug in draw tool — sliders/colors not reflecting on extruded shapes
+2. Wire up opacity slider + color buttons for both default and selected shapes
+3. Build "Import 2D/3D" dropdown menu with asset table view (10 rows, + buttons)
+4. Add file import flow with local file picker + Knowledge Base reference option
+5. Add 3D object placement mode with preview on map, rotate/move/scale tools
+6. Support GLB/OBJ import via Mapbox custom layers
+7. Add AI Agents to sidebar navigation + slide-out tab handle
+8. Fix AI Agents page indentation to match other pages
+9. TypeScript build check + commit & push
+
+### Work Completed
+
+**Sidebar Navigation Enhancement (committed `943bf3e`)**
+- Added AI Agents entry to sidebar navigation menu
+- Added slide-out tab handle on right edge of minimized sidebar using fixed positioning
+- Tab handle triggers sidebar expand on click
+
+**AI Agents Page Indentation Fix**
+- Fixed padding/indentation to match the style of other dashboard pages
+
+**Infrastructure & Geo Page**
+- Confirmed it's currently a placeholder page (24 lines). Will be built out as a full module in a future session.
+
+**Map Draw Tool — Stale Closure Bug Fix (`map-draw.tsx`)**
+- Root cause: `handleDrawCreate`, `handleDrawUpdate`, `handleDrawDelete`, and `handleSelectionChange` were event handlers registered once during `initDraw()` but captured the initial `features` array via closure. When they called `updateExtrusionSource(features)`, they passed the stale empty array — not the current React state.
+- Fix: Introduced `featuresRef` (a ref that always mirrors the latest `features` state) and `shapeColorRef`/`shapeHeightRef`/`shapeOpacityRef` for default shape properties. All event handlers now read from refs instead of stale closure variables.
+- Extracted `syncExtrusions` as a `useCallback` that reads from refs for current defaults, eliminating the duplicate `updateExtrusionSource` function.
+- `useEffect` now watches `[features, shapeColor, shapeHeight, shapeOpacity]` and calls `syncExtrusions` to keep the extrusion layer in sync.
+
+**Map Draw Tool — Color Buttons Fixed**
+- Default color buttons: already wired to `setShapeColor` — now properly reflected because `syncExtrusions` reads from `shapeColorRef`
+- Selected shape color buttons: `updateSelectedFeature({ color: c.value })` now correctly passes the updated features array (not stale) to `syncExtrusions`
+
+**Map Draw Tool — Opacity Slider Fixed**
+- Same ref-based fix ensures opacity changes propagate immediately to the fill-extrusion layer
+
+**Import 2D/3D Dropdown Menu**
+- New "Import 2D/3D" button next to the Draw button
+- Dropdown panel with:
+  - "Add File" button — opens import source flow
+  - "Place 3D Object" button — enters placement mode
+  - Asset table: columns for Name (with 2D/3D icon), Type (format badge), Size, Visibility toggle, Remove button
+  - Table shows up to 10 rows with overflow indicator for more
+  - Rows have hover state with remove button appearing on hover
+
+**File Import Flow**
+- Two-option import source selector: Local File / Knowledge Base
+- Local File: triggers native file picker accepting `.glb`, `.gltf`, `.obj`, `.fbx`, `.geojson`, `.json`, `.kml`, `.kmz`, `.gpx`, `.shp`, `.csv`, `.dxf`, `.svg`, `.png`, `.jpg`, `.jpeg`, `.tiff`, `.tif`
+- Knowledge Base: placeholder with "coming soon" message
+- GeoJSON files auto-load onto map with appropriate layer type (fill, line, or circle based on geometry)
+- GLB/GLTF files auto-enter 3D placement mode
+
+**3D Object Placement Mode**
+- Placement overlay panel with violet accent (distinct from draw tool's emerald)
+- Transform tool selector: Move / Rotate / Scale
+- Move mode: longitude/latitude numeric inputs for precise positioning
+- Rotate mode: rotation slider (0–360°) with degree readout
+- Scale mode: scale slider (0.1x–10x)
+- Altitude slider always visible (0–100m)
+- Confirm/Cancel buttons
+- On confirm: places a purple circle marker + label at the coordinates
+- Architecture ready for Three.js GLTFLoader + Mapbox custom layer integration
+
+**GLB/OBJ Import Support**
+- File picker accepts 3D formats
+- GLB/GLTF files create blob URLs and enter placement mode
+- Placement marker system uses Mapbox GeoJSON sources + circle/symbol layers
+- Full Three.js rendering pipeline architecture documented (custom layer + MercatorCoordinate) — marker placeholder used for now until Three.js integration is added
+
+### Technical Details
+
+**New interfaces:**
+- `ImportedAsset` — tracks imported files (id, name, type, format, size, visible, source)
+- `Placed3DObject` — tracks placed 3D objects (id, name, url, lng, lat, altitude, rotateX/Y/Z, scale)
+
+**New functions:**
+- `syncExtrusions(featuresMeta)` — unified extrusion GeoJSON sync (replaces old `updateExtrusionSource`)
+- `handleFileImport(e)` — processes file input, routes to GeoJSON loader or 3D placement
+- `addGeoJSONToMap(sourceId, geojson)` — adds GeoJSON source + auto-detected layer to map
+- `enterPlacementMode(name, url)` — initializes placement state at map center
+- `confirmPlacement()` / `cancelPlacement()` — finalize or abort 3D placement
+- `addPlacementMarker(obj)` — adds circle marker + label layer for placed objects
+- `toggleAssetVisibility(id)` / `removeAsset(id)` — manage imported assets
+
+### Build Status
+- `tsc --noEmit` — clean, zero errors
+- `next build` — clean, all 27 routes compiled
+- No regressions
+
+### Up Next
+- Full Three.js integration for GLB rendering in Mapbox custom layers
+- Infrastructure & Geo module — build out from placeholder
+- OBJ → GLB conversion pipeline for broader format support
+- Knowledge Base file integration for import flow
+- Live testing of draw tool on deployed site
+
+---

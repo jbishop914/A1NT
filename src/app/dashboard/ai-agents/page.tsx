@@ -256,7 +256,7 @@ export default function AIAgentsPage() {
   // ─── RENDER ────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6 max-w-[1400px]" data-testid="ai-agents-page">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
