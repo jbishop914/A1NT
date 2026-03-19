@@ -25,6 +25,8 @@ import {
   PanelLeftOpen,
   Zap,
   Shield,
+  Bot,
+  ChevronsRight,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -157,6 +159,11 @@ const navSections: NavSection[] = [
         notificationCount: 7,
       },
       {
+        label: "AI Agents",
+        href: "/dashboard/ai-agents",
+        icon: Bot,
+      },
+      {
         label: "Infrastructure",
         href: "/dashboard/infrastructure-geo",
         icon: MapPin,
@@ -238,6 +245,27 @@ export function AppSidebar({
 
   return (
     <>
+      {/* Slide-out tab handle — fixed position so sidebar overflow can't clip it */}
+      {!expanded && (
+        <button
+          onClick={() => setExpanded(true)}
+          className="
+            fixed z-50 top-1/2 -translate-y-1/2
+            w-4 h-12
+            bg-neutral-800/80 hover:bg-neutral-700/90
+            border-y border-r border-white/[0.08] hover:border-white/[0.15]
+            rounded-r-md
+            flex items-center justify-center
+            transition-all duration-200 ease-out
+            group cursor-pointer
+          "
+          style={{ left: '3.5rem' }}
+          data-testid="sidebar-slide-tab"
+        >
+          <ChevronsRight className="w-3 h-3 text-white/40 group-hover:text-white/70 transition-colors" />
+        </button>
+      )}
+
       {/* Backdrop for expanded state */}
       {expanded && (
         <div
@@ -262,6 +290,7 @@ export function AppSidebar({
           }
         }}
       >
+
         {/* ── Header: Business name ── */}
         <div className="h-14 flex items-center px-3 border-b border-white/[0.06] shrink-0">
           {expanded ? (
