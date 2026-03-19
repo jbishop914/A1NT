@@ -104,6 +104,15 @@ const SLIDER_CLS =
 const EMERALD_SLIDER = `${SLIDER_CLS} accent-emerald-500 [&::-webkit-slider-thumb]:bg-emerald-400`;
 const VIOLET_SLIDER = `${SLIDER_CLS} accent-violet-500 [&::-webkit-slider-thumb]:bg-violet-400`;
 
+/** Convert hex color + opacity (0–1) to rgba() string for Mapbox paint properties */
+function hexToRgba(hex: string, opacity: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
 // ─── Component ───────────────────────────────────────────────────
 
 export function MapDraw({ map }: MapDrawProps) {
@@ -166,14 +175,20 @@ export function MapDraw({ map }: MapDrawProps) {
         const allDrawn = drawRef.current.getAll();
         const extrusionFeatures = allDrawn.features.map((f) => {
           const meta = featuresMeta.find((m) => m.id === f.id);
+          const isHidden = meta?.visible === false;
+          // fill-extrusion-opacity doesn't support data-driven expressions,
+          // so we bake per-feature opacity into the color via rgba().
+          const hexColor = meta?.color ?? shapeColorRef.current;
+          const featureOpacity = isHidden ? 0 : (meta?.opacity ?? shapeOpacityRef.current);
+          const rgbaColor = hexToRgba(hexColor, featureOpacity);
+
           return {
             ...f,
             properties: {
               ...f.properties,
-              height: meta?.visible === false ? 0 : (meta?.height ?? shapeHeightRef.current),
+              height: isHidden ? 0 : (meta?.height ?? shapeHeightRef.current),
               base: meta?.base ?? 0,
-              color: meta?.color ?? shapeColorRef.current,
-              opacity: meta?.visible === false ? 0 : (meta?.opacity ?? shapeOpacityRef.current),
+              color: rgbaColor,
             },
           };
         });

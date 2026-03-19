@@ -149,6 +149,9 @@ export function CommandMap({
         });
 
         // Add the 3D fill-extrusion layer for user-drawn shapes
+        // Note: fill-extrusion-opacity does NOT support data-driven expressions
+        // (per-layer only). Per-feature opacity is encoded into the color via
+        // rgba() in syncExtrusions instead.
         map.addLayer({
           id: "user-extrusions-3d",
           type: "fill-extrusion",
@@ -157,7 +160,7 @@ export function CommandMap({
             "fill-extrusion-color": ["get", "color"],
             "fill-extrusion-height": ["get", "height"],
             "fill-extrusion-base": ["get", "base"],
-            "fill-extrusion-opacity": ["get", "opacity"],
+            "fill-extrusion-opacity": 0.85,
           },
         });
 
