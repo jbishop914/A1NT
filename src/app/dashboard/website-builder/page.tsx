@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   Search,
   Globe,
@@ -38,6 +38,10 @@ import {
   ChevronRight,
   Copy,
   Pencil,
+  Maximize2,
+  X,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -276,6 +280,7 @@ function Sparkline({ data, height = 32, className = "" }: { data: number[]; heig
 // ═══════════════════════════════════════════════════════════════════
 
 type MainTab = "sites" | "templates" | "analytics";
+type SheetTab = "preview" | "sections" | "theme" | "seo" | "analytics";
 
 export default function WebsiteBuilderPage() {
   // Main state
@@ -285,7 +290,7 @@ export default function WebsiteBuilderPage() {
   const [industryFilter, setIndustryFilter] = useState<string>("all");
   const [selectedSite, setSelectedSite] = useState<ClientWebsite | null>(null);
   const [siteSheetOpen, setSiteSheetOpen] = useState(false);
-  const [siteSheetTab, setSiteSheetTab] = useState<"sections" | "theme" | "seo" | "analytics">("sections");
+  const [siteSheetTab, setSiteSheetTab] = useState<SheetTab>("preview");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
 
   // Filtered sites
@@ -322,10 +327,34 @@ export default function WebsiteBuilderPage() {
     return { published, totalViews, totalSubmissions, drafts };
   }, []);
 
+  // Preview + publish state
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [fullPreviewOpen, setFullPreviewOpen] = useState(false);
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+
+  const generatePreview = useCallback(async (siteId: string) => {
+    setIsGenerating(true);
+    setPreviewHtml(null);
+    try {
+      const res = await fetch(`/api/website/generate?siteId=${siteId}`);
+      if (res.ok) {
+        const html = await res.text();
+        setPreviewHtml(html);
+      }
+    } catch (e) {
+      console.error("Failed to generate preview", e);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, []);
+
   function openSiteDetail(site: ClientWebsite) {
     setSelectedSite(site);
-    setSiteSheetTab("sections");
+    setSiteSheetTab("preview");
     setSiteSheetOpen(true);
+    setPublishedUrl(null);
+    generatePreview(site.id);
   }
 
   const templateForSite = (site: ClientWebsite) =>
@@ -790,10 +819,13 @@ export default function WebsiteBuilderPage() {
                 <Tabs
                   value={siteSheetTab}
                   onValueChange={(v) =>
-                    setSiteSheetTab((v ?? "sections") as typeof siteSheetTab)
+                    setSiteSheetTab((v ?? "preview") as SheetTab)
                   }
                 >
                   <TabsList className="w-full">
+                    <TabsTrigger value="preview" className="flex-1 text-[10px]" data-testid="sheet-tab-preview">
+                      <Eye className="h-3 w-3 mr-1" /> Preview
+                    </TabsTrigger>
                     <TabsTrigger value="sections" className="flex-1 text-[10px]" data-testid="sheet-tab-sections">
                       <LayoutGrid className="h-3 w-3 mr-1" /> Sections
                     </TabsTrigger>
@@ -811,6 +843,119 @@ export default function WebsiteBuilderPage() {
               </div>
 
               <Separator className="my-4" />
+
+              {/* ── Preview Tab ── */}
+              {siteSheetTab === "preview" && (
+                <div className="space-y-3">
+                  {/* Device toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      {(
+                        [
+                          { device: "desktop" as const, icon: Monitor, label: "Desktop" },
+                          { device: "tablet" as const, icon: Tablet, label: "Tablet" },
+                          { device: "mobile" as const, icon: Smartphone, label: "Mobile" },
+                        ] as const
+                      ).map(({ device, icon: DIcon, label }) => (
+                        <Button
+                          key={device}
+                          variant={previewDevice === device ? "secondary" : "ghost"}
+                          size="sm"
+                          className="h-7 gap-1 text-[10px]"
+                          onClick={() => setPreviewDevice(device)}
+                          data-testid={`preview-device-${device}`}
+                        >
+                          <DIcon className="h-3 w-3" /> {label}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 text-[10px]"
+                        onClick={() => previewHtml && setFullPreviewOpen(true)}
+                        disabled={!previewHtml}
+                        data-testid="btn-fullscreen-preview"
+                      >
+                        <Maximize2 className="h-3 w-3" /> Full Screen
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 text-[10px]"
+                        onClick={() => {
+                          if (!previewHtml) return;
+                          const blob = new Blob([previewHtml], { type: "text/html" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `${selectedSite?.subdomain || "site"}.html`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        disabled={!previewHtml}
+                        data-testid="btn-download-html"
+                      >
+                        <Download className="h-3 w-3" /> Download
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Preview iframe */}
+                  <div
+                    className="rounded-lg border overflow-hidden bg-white transition-all"
+                    style={{
+                      maxWidth:
+                        previewDevice === "mobile"
+                          ? "375px"
+                          : previewDevice === "tablet"
+                            ? "768px"
+                            : "100%",
+                      margin: previewDevice !== "desktop" ? "0 auto" : undefined,
+                      height: "480px",
+                    }}
+                  >
+                    {isGenerating ? (
+                      <div className="h-full flex flex-col items-center justify-center gap-2">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Generating preview...</span>
+                      </div>
+                    ) : previewHtml ? (
+                      <iframe
+                        srcDoc={previewHtml}
+                        className="w-full h-full border-0"
+                        sandbox="allow-scripts"
+                        title="Site preview"
+                        data-testid="preview-iframe"
+                      />
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center gap-2">
+                        <Globe className="h-6 w-6 text-muted-foreground/30" />
+                        <span className="text-xs text-muted-foreground">No preview available</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Published URL */}
+                  {publishedUrl && (
+                    <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Site Published</span>
+                      </div>
+                      <a
+                        href={publishedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-mono text-emerald-600 hover:underline mt-1 block truncate"
+                      >
+                        {publishedUrl}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* ── Sections Tab ── */}
               {siteSheetTab === "sections" && (
@@ -1236,24 +1381,47 @@ export default function WebsiteBuilderPage() {
               {/* ── Action buttons ── */}
               <Separator className="my-4" />
               <div className="flex items-center gap-2">
-                {selectedSite.status === "Draft" ? (
-                  <Button size="sm" className="gap-1.5 flex-1" data-testid="btn-publish">
-                    <Rocket className="h-3.5 w-3.5" /> Publish Site
-                  </Button>
-                ) : (
-                  <>
-                    <Button variant="outline" size="sm" className="gap-1.5 flex-1" data-testid="btn-rebuild">
-                      <RefreshCw className="h-3.5 w-3.5" /> Rebuild
-                    </Button>
-                    <Button size="sm" className="gap-1.5 flex-1" data-testid="btn-view-site">
-                      <ExternalLink className="h-3.5 w-3.5" /> View Live Site
-                    </Button>
-                  </>
-                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 flex-1"
+                  onClick={() => {
+                    setSiteSheetTab("preview");
+                    generatePreview(selectedSite.id);
+                  }}
+                  disabled={isGenerating}
+                  data-testid="btn-rebuild"
+                >
+                  {isGenerating ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  {isGenerating ? "Generating..." : "Rebuild Preview"}
+                </Button>
+                <Button
+                  size="sm"
+                  className="gap-1.5 flex-1"
+                  onClick={() => {
+                    if (!previewHtml) return;
+                    // Open generated site in a new tab
+                    const blob = new Blob([previewHtml], { type: "text/html" });
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, "_blank");
+                    // Simulate publish - in production this would push to hosting
+                    setPublishedUrl(`https://${selectedSite.subdomain}.a1nt.app`);
+                    setSiteSheetTab("preview");
+                  }}
+                  disabled={!previewHtml || isGenerating}
+                  data-testid="btn-publish"
+                >
+                  <Rocket className="h-3.5 w-3.5" />
+                  {selectedSite.status === "Draft" ? "Publish Site" : "View Live Site"}
+                </Button>
               </div>
 
               {/* Quick Launch CTA for drafts */}
-              {selectedSite.status === "Draft" && (
+              {selectedSite.status === "Draft" && !previewHtml && (
                 <div className="mt-4 p-3 rounded-lg border border-dashed border-foreground/20 bg-muted/30">
                   <div className="flex items-start gap-2">
                     <Zap className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
@@ -1262,7 +1430,16 @@ export default function WebsiteBuilderPage() {
                       <p className="text-[10px] text-muted-foreground mt-0.5">
                         Get a live landing page with your contact info in under 2 minutes. Just fill in your hero text and hit publish — everything else auto-populates from your A1NT data.
                       </p>
-                      <Button variant="outline" size="sm" className="gap-1 text-[10px] h-6 mt-2" data-testid="btn-quick-launch">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 text-[10px] h-6 mt-2"
+                        onClick={() => {
+                          setSiteSheetTab("preview");
+                          generatePreview(selectedSite.id);
+                        }}
+                        data-testid="btn-quick-launch"
+                      >
                         <Rocket className="h-2.5 w-2.5" /> Start Quick Launch
                       </Button>
                     </div>
@@ -1284,6 +1461,66 @@ export default function WebsiteBuilderPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* ═══════ Full-screen preview overlay ═══════ */}
+      {fullPreviewOpen && previewHtml && (
+        <div className="fixed inset-0 z-[100] bg-background">
+          <div className="flex items-center justify-between px-4 h-12 border-b bg-card">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium">
+                {selectedSite?.clientName} — Full Preview
+              </span>
+              <div className="flex items-center gap-1">
+                {(
+                  [
+                    { device: "desktop" as const, icon: Monitor },
+                    { device: "tablet" as const, icon: Tablet },
+                    { device: "mobile" as const, icon: Smartphone },
+                  ] as const
+                ).map(({ device, icon: DIcon }) => (
+                  <Button
+                    key={device}
+                    variant={previewDevice === device ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => setPreviewDevice(device)}
+                  >
+                    <DIcon className="h-3.5 w-3.5" />
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={() => setFullPreviewOpen(false)}
+              data-testid="btn-close-fullscreen"
+            >
+              <X className="h-4 w-4" /> Close
+            </Button>
+          </div>
+          <div
+            className="h-[calc(100vh-48px)] bg-muted/30 flex justify-center"
+          >
+            <iframe
+              srcDoc={previewHtml}
+              className="h-full border-0 bg-white transition-all"
+              style={{
+                width:
+                  previewDevice === "mobile"
+                    ? "375px"
+                    : previewDevice === "tablet"
+                      ? "768px"
+                      : "100%",
+                maxWidth: "100%",
+              }}
+              sandbox="allow-scripts"
+              title="Full screen site preview"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -800,3 +800,63 @@ Recommended Approach B (Multi-Tenant Next.js with subdomain routing) for the dep
 - Database connection and migration from sample data to real records
 
 ---
+
+## Session 9b — March 19, 2026
+
+### Context
+Continuation of Website Builder work. Josh confirmed the builder UI is deployment-agnostic and asked to get a basic working prototype — clients should be able to see their generated site and eventually publish a static HTML landing page.
+
+### Goals Established
+1. Build a static site generator that produces complete, self-contained HTML from a ClientWebsite config
+2. Wire it into the dashboard with live preview (iframe), device toggle, and publish flow
+3. Make the entire path work end-to-end: click site → see preview → download or publish
+
+### Work Produced
+
+**`src/lib/site-generator.ts` — Static site generator (859 lines):**
+- Takes a `ClientWebsite` config and produces a complete, self-contained HTML page
+- Embedded CSS with CSS custom properties driven by the site's theme (primary/accent colors)
+- Google Fonts loaded per the site's font family config
+- Renders all 10 section types: Hero, Services, About, Team, Reviews, Contact (with form), Map (placeholder), Promotions, Gallery, FAQ (with toggle)
+- Responsive design — mobile breakpoints, sticky nav, flexible grids
+- Section order follows the site's configured section ordering
+- Nav links auto-generated from visible sections
+- SEO meta tags (title, description, Open Graph)
+- HTML entity escaping for security
+- Footer with "Powered by A1 Integrations" branding
+- Default content per section (would come from DB/modules in production)
+
+**`src/app/api/website/generate/route.ts` — First API route in the project:**
+- GET endpoint accepting `?siteId=` parameter
+- Looks up site from sample data, generates HTML, returns `text/html`
+- Error handling for missing/invalid IDs
+
+**Updated `src/app/dashboard/website-builder/page.tsx`:**
+- Added **Preview tab** (now the default when opening a site) with:
+  - Live iframe rendering the generated site via API call
+  - Device toggle (Desktop/Tablet/Mobile) adjusting iframe width
+  - Full Screen mode (fixed overlay with device toggle)
+  - Download button (generates blob, triggers file download as HTML)
+  - Loading spinner during generation
+  - Published URL success card
+- **Rebuild Preview** button regenerates the preview from the API
+- **Publish / View Live Site** button opens the generated HTML in a new tab and simulates publish
+- Quick Launch CTA shows for draft sites without a preview yet
+- All 5 sheet tabs: Preview, Sections, Theme, SEO, Stats
+
+**Visual QA — generated sites look professional:**
+- Tested Ace Plumbing (blue theme, Inter font) and Summit HVAC (dark+cyan theme, DM Sans)
+- Both sites render with proper nav, hero, services grid, reviews, contact form, footer
+- Different section configurations produce different nav links (Specials, FAQ, etc.)
+- Responsive layout confirmed at desktop width
+- Dashboard preview iframe loads and renders correctly
+
+**Build status:** `tsc --noEmit` clean, `npm run build` clean. API route appears as dynamic (`ƒ`) in build output.
+
+### Up Next
+- Wire real hosting (S3 or Vercel) for actual publish-to-URL functionality
+- Custom domain CNAME setup wizard
+- Content editing within the builder (inline text, image uploads)
+- P4: Import & Onboarding, AI Agents
+
+---
