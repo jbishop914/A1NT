@@ -688,19 +688,10 @@ REDIS_URL=                   # For session context buffer
 
 ## 9. Build Phases
 
-### Phase 1A — Agent Management UI (building now)
-- Agent roster page with overview cards for each agent
-- Agent Builder: persona selector, role selector, company info (auto), model config (model, temp, voice, VAD)
-- Context Layers visualization: accordion showing all 6 layers with token counts and sources
-- Tools & Permissions panel: checkbox grid for module access
-- Experience & Corrections viewer: activity log, corrections panel, learning metrics
-- Sample data for demo agents (Alex the Receptionist, etc.)
-- **Deliverable:** Full agent management + builder interface in the dashboard
-
-### Phase 1B — Voice Pipeline MVP (Receptionist answers the phone)
+### Phase 1 — Voice Pipeline MVP (Receptionist answers the phone)
 - Twilio Voice integration (phone number, webhook, Media Streams)
 - OpenAI Realtime WebSocket relay
-- System prompt assembly from persona + context layers
+- Basic system prompt (hardcoded persona)
 - Greeting + free-form conversation
 - Call transcript logging
 - **Deliverable:** Call the number, talk to Alex the receptionist
@@ -726,201 +717,33 @@ REDIS_URL=                   # For session context buffer
 - Benchmark: measure latency improvement on tool calls with vs. without Helper
 - **Deliverable:** Measurably faster, more informed responses
 
-### Phase 5 — Multi-Role Expansion
+### Phase 5 — Agent Management UI
+- Agent roster page (provision, configure, deploy)
+- Performance dashboard (metrics, reviews, feedback)
+- Persona editor (view/edit the Markdown document)
+- Call history with playback and transcript
+- **Deliverable:** Full management interface in the dashboard
+
+### Phase 6 — Multi-Role Expansion
 - Dispatcher, Inside Sales, Customer Service agent templates
 - Multi-channel (add email, SMS, chat handling)
 - Cross-agent coordination (Receptionist creates WO → Dispatcher assigns tech)
 - Agent Marketplace (pre-built templates per industry)
 
-### Phase 6 — Director of AR + Graph Visualization
-- Director of AR meta-agent (continuous review, proposals, tech scouting)
-- Conversational interface for business owners
-- Inter-agent graph visualization (React Flow / Xyflow)
-- Configuration proxy (Director adjusts settings on behalf of owner)
+---
+
+## 10. Open Questions / Decisions Needed
+
+1. **Twilio vs. alternatives?** Twilio is the most proven integration with OpenAI Realtime. Alternatives: Vonage, LiveKit (has built-in SIP support), or direct SIP trunk. Twilio is the safe bet for MVP.
+
+2. **gpt-realtime-mini vs gpt-realtime-1.5?** Start with `mini` ($10/M input tokens vs $32/M). Upgrade to `1.5` if quality isn't sufficient. The model is a per-session config — easy to A/B test.
+
+3. **Redis for Session Buffer?** For MVP, an in-memory Map per session is fine. Redis becomes valuable when we scale to multiple server instances or need cross-session state.
+
+4. **Helper Agent: Perplexity Sonar vs local embedding search?** Sonar for KB search (already built), local pgvector for customer history/memory lookups. Both are fast enough.
+
+5. **Voice persona customization?** OpenAI Realtime offers several voices (alloy, echo, fable, onyx, nova, shimmer). Should this be configurable per agent in the UI?
 
 ---
 
-## 10. Decisions Made (from Review 2026-03-19)
-
-1. **Telephony:** Twilio. Josh will provide keys.
-2. **Starting model:** `gpt-realtime-mini`. Config panel supports hot-swap to `gpt-realtime-1.5`.
-3. **Redis:** Defer. In-memory Map for MVP.
-4. **Helper Agent:** Perplexity Sonar for KB, pgvector for memory (when DB connected).
-5. **Voice customization:** Yes — configurable per agent in the admin UI.
-
----
-
-## 11. Director of AR (Agent Resources) — Later Phase
-
-> "Classic delegation from the top. The business owner doesn't want to review receptionist performance for the week. They want to chat with their Director of AR."
-
-The Director of AR is a **meta-agent** — it doesn't serve customers. It serves the business owner by overseeing all other agents.
-
-### Responsibilities
-
-1. **Continuous Performance Review** — Not annual, not quarterly. Real-time. Monitors every agent's metrics (response times, accuracy, escalation rates, customer satisfaction) and surfaces trends.
-2. **Bottleneck Identification** — Detects when an agent's tool calls are slow, when a particular question type causes failures, when escalation rates spike.
-3. **Improvement Proposals** — Generates actionable recommendations: "Receptionist accuracy on water heater questions dropped 8% this week. Recommend expanding the plumbing KB with tankless installation FAQ. Draft attached for your review."
-4. **Technology Scouting** — Runs configurable research programs (daily, weekly, adjustable by admin):
-   - Deep dives into latest AI model releases (OpenAI, Anthropic, Perplexity, open-source)
-   - Compares new capabilities against current stack
-   - Flags potential upgrades: "Anthropic released Claude 4.5 with 2x faster function calling. Could reduce receptionist tool-call latency by ~200ms. Recommend testing."
-5. **Conversational Interface** — Business owners can chat with the Director in natural language:
-   - "How's the receptionist doing this week?"
-   - "Are we getting more calls than last month?"
-   - "Customers are complaining that the receptionist can't answer technical questions. Fix it."
-   - Director can then adjust agent configurations (expand KB access, increase technical depth, adjust escalation thresholds) without the owner touching config panels.
-6. **Configuration Proxy** — Can make changes to agent settings on behalf of the owner after conversational approval. "I'll increase the receptionist's technical discussion depth to Level 3 and expand their KB access to include the full service manual. Shall I proceed?"
-
-### Implementation Notes (Future Phase)
-
-- Runs as a scheduled background agent (Perplexity Agent API or GPT-5.x text)
-- Has read access to all agent metrics, logs, corrections, and memory
-- Has write access to agent configurations (with owner approval for significant changes)
-- Research programs are cron-scheduled and configurable in the admin UI
-- Chat interface lives in the AI Agents dashboard as a persistent panel
-
----
-
-## 12. Corrections & Learning System
-
-### How Corrections Work
-
-```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Interaction  │────▶│  Auto-Review  │────▶│  Correction  │
-│  Completed    │     │  (Triggers)   │     │  Generated   │
-└──────────────┘     └──────────────┘     └──────┬───────┘
-                                                  │
-                                          ┌───────▼───────┐
-                                          │  Appended to  │
-                                          │  Persona Doc  │
-                                          │  "Corrections │
-                                          │   Received"   │
-                                          └───────────────┘
-```
-
-### Auto-Correction Triggers (configurable)
-
-| Trigger | Description | Default |
-|---------|-------------|--------|
-| Customer frustration detected | Sentiment analysis flags negative tone | ON |
-| Escalation after failed resolution | Agent couldn't handle → escalated to human | ON |
-| Tool call failure | Agent called a tool and got an error or empty result | ON |
-| Long silence / high latency | Agent took >3 seconds to respond (possible confusion) | ON |
-| Supervisor manual flag | Human marks an interaction for review | Always ON |
-| Repeated question | Customer had to ask the same thing twice | ON |
-| Contradictory statements | Agent said two conflicting things in one session | ON |
-
-### Configuration Panel (in Admin UI)
-
-- **Correction Frequency:** How aggressively corrections are generated
-  - Light — only on escalations and manual flags
-  - Standard — auto-triggers + escalations + manual
-  - Aggressive — every interaction scored, corrections for anything below threshold
-- **Learning Depth:** How much detail goes into corrections
-  - Summary only — "Don't quote tankless pricing without mentioning gas line requirement"
-  - Full context — includes the transcript excerpt, what went wrong, and the correct response
-- **Retention Policy:** How long corrections stay active in the persona
-  - Permanent — all corrections accumulate forever
-  - Rolling window — only last 90 days (older ones archived)
-  - Decaying — corrections that haven't been relevant in 60 days get archived
-- **Manual Override:** Admins can view, edit, rewrite, remove any correction
-
-### Activity & Corrections Viewer (UI)
-
-- **Activity Log:** Scrollable list of all agent interactions, sortable by date, type, outcome
-  - Each line item shows: timestamp, channel (phone/email/chat), summary, outcome badge (resolved/escalated/error)
-  - Click to expand: full transcript, tool calls made, response times, customer sentiment
-  - Corrections icon (⚠️) on items that generated corrections — click to view
-- **Corrections Panel:** Dedicated view of all corrections
-  - Grouped by category (knowledge gap, process error, tone issue, escalation failure)
-  - Each correction shows: what happened, what was auto-corrected, current status
-  - Inline edit: rewrite the correction, add notes, mark as resolved
-  - Bulk actions: archive old corrections, export, re-apply after persona reset
-- **Learning Metrics:** Visual dashboard showing correction trends over time
-  - Are corrections decreasing? (Good — agent is learning)
-  - Are they increasing? (May need intervention or config adjustment)
-  - Breakdown by category — which types of errors are most common?
-
----
-
-## 13. Agent Builder — Configuration UI Spec
-
-### Modular Assembly Concept
-
-Building an agent is like assembling a person. Each component is a discrete, draggable module:
-
-```
-┌──────────────────────────────────────────────────────────┐
-│                    AGENT BUILDER                          │
-│                                                           │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │
-│  │  👤 Persona  │  │  🔧 Role    │  │  🏢 Company │      │
-│  │  "Alex"     │  │ Receptionist│  │  (auto)     │      │
-│  │  warm,      │  │ front desk, │  │  TripleA    │      │
-│  │  professional│  │ calls,email │  │  Plumbing   │      │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘      │
-│         │                │                │              │
-│         └────────────────┼────────────────┘              │
-│                          │                               │
-│                    ┌─────▼─────┐                         │
-│                    │  🧠 AGENT │                         │
-│                    └───────────┘                         │
-│                                                           │
-│  ADDITIONAL MODULES (drag to attach):                    │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
-│  │📋 SOPs   │ │📞 Voice  │ │🔑 Perms  │ │📊 Goals  │   │
-│  │(select)  │ │config    │ │& access  │ │& KPIs    │   │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
-│                                                           │
-│  ── MODEL CONFIGURATION ──────────────────────────────   │
-│  Model: [gpt-realtime-mini ▼] [Switch to 1.5]           │
-│  Temperature: [0.7 ───●──── 1.0]                        │
-│  Voice: [Alloy ▼] Shimmer | Echo | Nova | Onyx | Fable  │
-│  Max tokens: [4096]                                      │
-│  VAD mode: [Semantic ▼] Server VAD                       │
-│                                                           │
-│  ── CONTEXT LAYERS (visual breakdown) ─────────────────  │
-│  ┌─ Layer 1: Platform ──── 200 tokens ─── [static]  ┐   │
-│  ├─ Layer 2: Industry ──── 150 tokens ─── [template] ┤   │
-│  ├─ Layer 3: Company ───── 180 tokens ─── [dynamic]  ┤   │
-│  ├─ Layer 4: Role ──────── 350 tokens ─── [persona]  ┤   │
-│  ├─ Layer 5: Personality ─ 120 tokens ─── [persona]  ┤   │
-│  └─ Layer 6: Live Context ─ var tokens ── [runtime]  ┘   │
-│  Total estimated prompt: ~1,000-2,500 tokens              │
-│  Click any layer to view/edit source document             │
-│                                                           │
-│  ── TOOLS & PERMISSIONS ──────────────────────────────   │
-│  ☑ Calendar (read/write)   ☑ Clients (read/write)       │
-│  ☑ Knowledge Base (read)   ☑ Work Orders (create)       │
-│  ☐ Financial (none)        ☐ Inventory (none)           │
-│  ☑ Transfer calls          ☑ Send notifications         │
-│                                                           │
-└──────────────────────────────────────────────────────────┘
-```
-
-### Phase 1 Implementation (Dropdowns + Panels)
-
-For MVP, use Select dropdowns and expandable panels instead of drag-and-drop:
-- Persona: dropdown of available personas + "Create New" button
-- Role: dropdown of role templates (Receptionist, Dispatcher, etc.)
-- Company: auto-populated from org settings (always included)
-- Model config: inline controls (select, sliders, toggles)
-- Context layers: expandable accordion showing each layer with token count and source
-
-### Future Phase: Graph Visualization
-
-When agents interact inter-department, add a node graph view:
-- Each agent = a node (icon + name + role)
-- Edges = communication channels between agents
-- Departments = grouped clusters
-- Click a node = open that agent's config
-- Click an edge = view the interaction protocol between those two agents
-- Real-time activity overlay: pulsing nodes when agents are active, edge animations when agents communicate
-
-Library candidates: React Flow, D3-force, or the Xyflow library (formerly React Flow).
-
----
-
-*This architecture document is a living spec. Updated 2026-03-19 with: decisions from review, Director of AR concept, corrections system design, agent builder UI spec, graph visualization roadmap.*
+*This architecture document should be treated as a living spec. As we build each phase, update the relevant sections with implementation notes and decisions made.*

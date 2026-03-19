@@ -945,3 +945,103 @@ Continuation of Website Builder work. Josh confirmed the builder UI is deploymen
 - Import & Onboarding module (P4)
 
 ---
+
+## Session 11 — Module 16: AI Agent Employees — Architecture & Agent Management UI
+**Date:** March 19, 2026
+**Focus:** Research and design the AI Agent Employees architecture, then build Phase 1A — the Agent Management dashboard with full admin configuration UI
+
+### Goals
+1. Research OpenAI Realtime API + Twilio Voice integration patterns for live voice pipeline
+2. Design complete AI Agent architecture: voice pipeline, "tick" system, memory tiers, corrections/learning, helper agent pattern
+3. Archive the original architecture spec; maintain a working copy for iterative amendments
+4. Update MODULE-AI-AGENTS.md with Director of AR, corrections system, agent builder UI spec, graph visualization roadmap
+5. Build the AI Agents dashboard page with three tabs: Agent Roster, Agent Builder, Experience & Learning
+6. Visual QA + dark mode fix + commit
+
+### Architecture Designed
+
+**Voice Pipeline:** Twilio Voice + Media Streams → A1NT Gateway (Node.js WebSocket) → OpenAI Realtime API (G.711 µ-law, no transcoding). Starting model: `gpt-realtime-mini` with UI toggle to `gpt-realtime-1.5`.
+
+**"Tick" System:** Maps to OpenAI Realtime's native function calling. Each "tick" (~400-800ms) represents a context enrichment cycle during live calls — the agent can query knowledge bases, look up customers, check schedules, and create work orders mid-conversation.
+
+**Helper Agent Pattern:** A cheap text-only process (Perplexity Sonar) runs in parallel, pre-fetching context into the session buffer so the voice model can reference enriched data without latency spikes.
+
+**4-Tier Memory:** Core (permanent company/role knowledge) → Working (current conversation context) → Recall (per-client/per-topic retrieved at call start) → Archival (compressed post-call summaries). Persona document stored as Markdown.
+
+**Corrections System:** Auto-detection triggers (customer frustration, escalation after failure, tool call failure, long silence, repeated questions, contradictory statements). Each correction categorized as knowledge gap, factual error, tone issue, or protocol violation. Active → Resolved lifecycle with learned behaviors.
+
+**Director of AR (Future Phase):** A meta-agent that continuously reviews all agent performance, proposes improvements, scouts new AI technologies, and provides a conversational interface for business owners to manage their AI workforce.
+
+**Cost Estimate:** ~$0.37–$1.02 per 5-minute call.
+
+### Work Produced
+
+**New file: `docs/admin-kb/archives/MODULE-16-ARCHITECTURE-ORIGINAL-2026-03-19.md`**
+- Archived, read-only copy of the original architecture specification
+- Preserved as reference baseline before any build-phase modifications
+
+**Updated: `docs/MODULE-16-ARCHITECTURE.md`** — Working copy, amended with:
+- Director of AR/HR meta-agent concept and conversational configuration interface
+- Corrections system specification (auto-detection, categorization, resolution workflow)
+- Agent Builder UI specification (persona/role/company assembly, model config, context layer visualization)
+- Graph visualization roadmap (React Flow/Xyflow for inter-agent connection mapping)
+- Technology scouting pipeline for continuous improvement
+
+**New file: `src/lib/sample-data-agents.ts`** — Agent types + realistic sample data
+- `AgentEmployee` interface with full schema: persona, role, company info, model config (model, voice, temperature, maxTokens, vadMode), context layers (6-tier with token allocations), permissions (module R/W + tool toggles), learning config, corrections, interactions, learned behaviors
+- 3 sample agents: Alex (Receptionist, active, 847 tasks), Jordan (Dispatcher, active, 423 tasks), Riley (Inside Sales, training, 12 tasks)
+- 5 roles across departments (Front Office, Operations, Sales, Service, Finance)
+- 4 personas with distinct greeting styles, personality traits, voice assignments
+- Context layer definitions with type badges (static, template, dynamic, persona, runtime)
+- 3 corrections with categories (knowledge gap, factual error, tone issue) and resolution tracking
+- 7 interaction history entries with caller names, timestamps, durations, outcomes, satisfaction scores
+
+**New file: `src/app/dashboard/ai-agents/page.tsx`** — Full AI Agents dashboard (1265 lines)
+
+**Tab 1 — Agent Roster:**
+- Summary cards: Total Agents, Tasks Today, Avg Accuracy, Avg Satisfaction
+- Agent table with columns: Agent (avatar + name + status badge), Role + department, Channels (phone/email/chat/SMS icons), Autonomy level, Tasks count, Accuracy %, Satisfaction rating, Actions (view/configure/analytics)
+- "+ New Agent" button in header
+
+**Tab 2 — Agent Builder:**
+- Left column — Identity Assembly:
+  - Persona selector with preview (greeting, personality traits, voice, style badges)
+  - Role selector with capabilities list, tool badges, and module access tags
+  - Company profile card (auto-populated from org)
+- Right column — Technical Configuration:
+  - Model Configuration (collapsible): Model selector (gpt-realtime-mini / 1.5 / 4o-mini-realtime), Voice selector (alloy/ash/ballad/coral/echo/sage/shimmer/verse), Temperature slider with Precise↔Creative labels, Max Tokens input, VAD Mode selector (semantic/server_vad/disabled)
+  - Context Layers visualization: 6-tier stack with numbered layers, type badges (static/template/dynamic/persona/runtime), token counts, colored progress bars, total token sum
+  - Tools & Permissions (collapsible): Module-level R/W toggle grid (Clients, Scheduling, Work Orders, KB, Invoicing, Financial, Inventory, Workforce) + Tool toggles (Calendar, Transfer calls, Send notifications)
+  - Learning Configuration (collapsible): Correction Frequency, Learning Depth, Retention Policy selectors + Auto-Correction Trigger toggles (6 categories)
+- "Deploy Agent" sticky footer button
+
+**Tab 3 — Experience & Learning:**
+- Agent selector dropdown
+- Learning metrics cards: Corrections this month, Active corrections, Resolved corrections, Learned behaviors
+- Activity Log: Interaction history with caller name, timestamp, duration, satisfaction, outcome badges (resolved/transferred/escalated), expandable detail rows
+- Corrections panel: Filterable by category and status, each entry shows category badge, status badge, description, date, trigger source, expandable resolution details
+- Learned Behaviors list: Accumulated knowledge items with learned dates and source references
+
+**Updated: `src/app/layout.tsx`**
+- Added `className="dark"` to `<html>` tag — enables proper dark mode CSS variable resolution across all shadcn components (selects, inputs, buttons). Previously components were using light-mode foreground colors on the dark background.
+
+### Architecture Decisions
+- **Hybrid approach:** OpenAI Realtime (voice) + Perplexity Agent API (knowledge) + Custom memory system. Best-in-class for each responsibility.
+- **Telephony:** Twilio Voice + Media Streams — industry standard, G.711 µ-law compatible with OpenAI Realtime (no transcoding needed).
+- **Dark mode fix:** The dashboard has always been dark-themed (`bg-neutral-950`) but shadcn component CSS variables were resolving in light mode. Adding `dark` class to `<html>` ensures consistent rendering across all UI components.
+- **Sample data approach:** Rich, realistic sample data (not lorem ipsum) that demonstrates real plumbing/HVAC business scenarios — makes the admin UI immediately understandable.
+
+### Build Status
+- `tsc --noEmit` — clean, zero errors
+- Visual QA via Playwright — all 3 tabs render correctly at 1600×900
+- Dark mode validated across AI Agents page and Command Center dashboard
+- No regressions on existing pages
+
+### Up Next
+- **Phase 1B — Voice Pipeline:** Twilio webhook routes (`/api/voice/incoming`, `/api/voice/status`), OpenAI Realtime WebSocket relay, session management — pending Twilio API keys
+- **Phase 2 — Tool System:** Calendar integration, customer lookup, KB search, work order creation — the "tick" function call implementations
+- **Phase 3 — Memory System:** 4-tier memory with Prisma persistence, persona document generation
+- **Phase 4 — Agent Graph:** React Flow/Xyflow visualization for inter-agent connections
+- **Phase 5 — Director of AR:** Meta-agent for continuous review and improvement proposals
+
+---
