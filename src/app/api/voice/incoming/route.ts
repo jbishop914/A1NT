@@ -39,13 +39,18 @@ async function handleIncomingCall(request: NextRequest) {
     `[Voice] Incoming call: ${callerNumber} → ${calledNumber} (${callSid}) from ${callerCity}, ${callerState}`
   );
 
-  // Determine the WebSocket URL for the media stream.
-  // In production on Vercel, we need the voice server running separately
-  // (Vercel serverless doesn't support persistent WebSockets).
-  // For now, we construct the URL based on the request host.
-  const host = request.headers.get("host") ?? "localhost:3000";
-  const protocol = host.includes("localhost") ? "ws" : "wss";
-  const wsUrl = `${protocol}://${host}/api/voice/media-stream`;
+  // The WebSocket URL must point to the standalone voice server (Railway),
+  // NOT Vercel — Vercel serverless doesn't support persistent WebSockets.
+  // VOICE_SERVER_URL should be set to the Railway public domain (e.g., "a1nt-voice.up.railway.app")
+  const voiceServerHost = process.env.VOICE_SERVER_URL;
+  if (!voiceServerHost) {
+    console.error("[Voice] VOICE_SERVER_URL env var not set — cannot route media stream");
+    return new NextResponse(
+      `<?xml version="1.0" encoding="UTF-8"?><Response><Say>I'm sorry, the voice system is not configured yet. Please try again later.</Say></Response>`,
+      { status: 200, headers: { "Content-Type": "text/xml" } }
+    );
+  }
+  const wsUrl = `wss://${voiceServerHost}/api/voice/media-stream`;
 
   // Build TwiML response
   // The <Connect><Stream> verb opens a bidirectional WebSocket

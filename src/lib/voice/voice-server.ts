@@ -24,7 +24,9 @@ import { handleMediaStream } from "./session-manager";
 
 /* ─── Configuration ────────────────────────────────────────────────────── */
 
-const PORT = parseInt(process.env.VOICE_SERVER_PORT ?? "8081", 10);
+// Railway assigns PORT dynamically; fall back to VOICE_SERVER_PORT or 8081 for local dev
+const PORT = parseInt(process.env.PORT ?? process.env.VOICE_SERVER_PORT ?? "8081", 10);
+const HOST = "0.0.0.0"; // Required for Railway / containerized environments
 const HEALTH_CHECK_PATH = "/health";
 const MEDIA_STREAM_PATH = "/api/voice/media-stream";
 
@@ -134,7 +136,7 @@ wss.on("error", (err) => {
 
 /* ─── Start Server ─────────────────────────────────────────────────────── */
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log("╔══════════════════════════════════════════════════════╗");
   console.log("║          A1NT Voice Pipeline Server v1.0.0          ║");
   console.log("╠══════════════════════════════════════════════════════╣");
