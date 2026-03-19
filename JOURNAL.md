@@ -1045,3 +1045,117 @@ Continuation of Website Builder work. Josh confirmed the builder UI is deploymen
 - **Phase 5 — Director of AR:** Meta-agent for continuous review and improvement proposals
 
 ---
+
+## Session 12 — March 19, 2026
+
+### Context
+Phase 1B — Voice Pipeline Foundation. Josh provided Twilio API credentials (Account SID, Auth Token, API Key SID `a1ntegral`, API Key Secret) and phone number. All five env vars saved in Vercel. This session builds the complete real-time voice infrastructure: Twilio ↔ OpenAI Realtime bidirectional audio proxy with function calling.
+
+### Goals Established
+1. **Configure Twilio credentials** — `.env` placeholders + Next.js config for server-side access
+2. **Build complete voice pipeline** — types, prompts, tools, session manager, voice server, API routes
+3. **Add live call monitoring** to AI Agents dashboard
+4. **TypeScript build validation** — clean compile of entire codebase
+
+### Work Produced
+
+**New: `src/lib/voice/types.ts`**
+- Voice pipeline type definitions: `RealtimeModel` (gpt-4o variants), `VoicePreset` (8 voices), `VadMode`, `VoiceSession` (full session state with timing, metrics, tool calls)
+- Twilio stream event types: `TwilioStreamEvent` union for connected/start/media/stop/mark events
+- OpenAI Realtime event types: session.created, response.audio.delta, response.function_call_arguments.done, input_audio_buffer.speech_started/stopped, error
+
+**New: `src/lib/voice/prompts.ts`**
+- 6-layer composable prompt system: Platform → Industry → Company → Role → Personality → Live Context
+- `buildSystemPrompt()` assembles layers with clear section separators
+- `buildDefaultPrompt()` provides sensible demo defaults (A1 Integrations, home services, receptionist role)
+- Personality layer includes voice pacing, empathy guidelines, hold behavior, escalation rules
+- Live context layer injects current date/time, active calls, business hours awareness
+
+**New: `src/lib/voice/tools.ts`**
+- 6 OpenAI Realtime function definitions with full JSON Schema parameters:
+  - `lookup_customer` — search by name, phone, email, or account number
+  - `check_schedule` — query technician availability by date range and service type
+  - `create_work_order` — full work order creation with customer, service, priority, scheduling
+  - `search_knowledge_base` — query company KB for pricing, policies, service info
+  - `transfer_call` — route to department or specific extension with context
+  - `send_confirmation` — trigger SMS/email confirmation to customer
+- Stub handler implementations returning realistic demo data
+- `handleToolCall()` dispatcher with unknown-tool fallback
+
+**New: `src/lib/voice/session-manager.ts`**
+- Full session lifecycle management: create → connect Twilio WS ↔ OpenAI Realtime WS → proxy → cleanup
+- `VoiceSessionManager` class with session map, event handling, metrics tracking
+- Bidirectional audio proxy: Twilio G.711 µ-law ↔ OpenAI Realtime (no transcoding needed)
+- OpenAI Realtime function calling flow: `response.function_call_arguments.done` → execute tool → `conversation.item.create` with `function_call_output` → `response.create` to resume
+- Interruption handling: `input_audio_buffer.speech_started` triggers `response.cancel` for barge-in support
+- Usage tracking: token counts from `response.done` events
+- Graceful cleanup on disconnect with session metrics logging
+
+**New: `src/lib/voice/voice-server.ts`**
+- Standalone Node.js WebSocket server on port 8081 (separate from Next.js — App Router doesn't support persistent WS)
+- HTTP health check endpoint at `/health`
+- TwiML generation at `/twiml` for Twilio webhook configuration
+- WebSocket upgrade handling at `/media-stream` for Twilio Media Streams
+- Auto-creates VoiceSessionManager instance, routes incoming connections to session creation
+- Configurable via env vars: `VOICE_SERVER_PORT`, `OPENAI_API_KEY`
+
+**New: `src/lib/voice/index.ts`**
+- Barrel export for public API: types, prompts, tools, VoiceSessionManager
+
+**New: `src/app/api/voice/incoming/route.ts`**
+- Twilio webhook endpoint — returns TwiML with `<Connect><Stream>` pointing to voice server WebSocket
+- Dynamic URL construction from request headers for WebSocket endpoint
+- Configurable greeting message and voice preset
+
+**New: `src/app/api/voice/status/route.ts`**
+- Twilio call status callback endpoint
+- Logs call lifecycle events (initiated, ringing, answered, completed) with duration and caller info
+
+**New: `src/app/api/voice/sessions/route.ts`**
+- Active sessions API endpoint returning current call data
+- Demo data for development: simulated active call with metrics (duration, tool calls, sentiment)
+
+**Updated: `src/app/dashboard/ai-agents/page.tsx`**
+- Added `LiveCallsBanner` component to AI Agents dashboard
+- Pulsing green indicator for active calls with real-time count
+- Expandable call details: caller info, live timer (auto-updating), agent assignment, tool call count
+- Monitor button for future live call listening
+- Voice pipeline status section: pipeline state, latency, uptime metrics
+- Graceful collapse when no active calls
+
+**Updated: `package.json`**
+- Added `voice-server` npm script: `tsx src/lib/voice/voice-server.ts`
+- Added dependencies: `ws`, `twilio`, `tsx` (already installed)
+
+**Updated: `.env`**
+- Added placeholder env vars: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SID_KEY`, `TWILIO_SECRET_KEY`, `TWILIO_PHONE_NUMBER`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `VOICE_SERVER_PORT`
+
+### Architecture Decisions
+- **Standalone WebSocket server** (port 8081) — Next.js App Router does not support persistent WebSocket connections. The voice server runs as a separate Node.js process alongside Next.js, handling the long-lived Twilio Media Stream connections.
+- **No transcoding** — Twilio's G.711 µ-law (`audio/pcmu`) is directly compatible with OpenAI Realtime API. Audio bytes pass through unmodified, minimizing latency.
+- **6-layer prompt composition** — Enables per-tenant customization at every level (platform defaults → industry specifics → company branding → role behavior → personality tuning → live context injection). Each layer is independently configurable through the admin UI in future phases.
+- **Tool stub pattern** — All 6 tools have complete OpenAI function schemas and return realistic demo data. Stub implementations will be replaced with real integrations (Prisma queries, external APIs) as modules are wired up.
+- **Session manager pattern** — Centralized class manages all active sessions, enabling the dashboard to query real-time call status, and future features like live monitoring, call recording, and supervisor barge-in.
+
+### Build Status
+- `tsc --noEmit` — clean, zero errors
+- `next build` — clean, all routes compiled (3 new dynamic voice API routes)
+- No regressions on existing pages
+
+### Twilio Configuration Reference
+- **Account SID:** stored in Vercel as `TWILIO_ACCOUNT_SID`
+- **API Key (a1ntegral) SID:** stored in Vercel as `TWILIO_SID_KEY`
+- **Phone Number:** stored in Vercel as `TWILIO_PHONE_NUMBER`
+- Auth Token and API Secret stored in Vercel as `TWILIO_AUTH_TOKEN` and `TWILIO_SECRET_KEY`
+- Twilio webhook URL (configure in Twilio console): `https://a1ntegrel.vercel.app/api/voice/incoming`
+- Status callback URL: `https://a1ntegrel.vercel.app/api/voice/status`
+
+### Up Next
+- **Phase 1C — Twilio Console Config:** Configure the phone number's webhook URLs in Twilio console to point to the deployed voice endpoints
+- **Phase 2 — Live Testing:** End-to-end call test with real OpenAI Realtime connection, verify audio quality and latency
+- **Phase 3 — Tool Implementations:** Replace stub handlers with real Prisma queries (customer lookup, schedule check, work order creation)
+- **Phase 4 — Memory System:** 4-tier memory with Prisma persistence, persona document generation
+- **Phase 5 — Agent Graph:** React Flow/Xyflow visualization for inter-agent connections
+- **Phase 6 — Director of AR:** Meta-agent for continuous review and improvement proposals
+
+---

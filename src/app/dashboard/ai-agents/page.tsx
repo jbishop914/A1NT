@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Bot,
   Phone,
@@ -15,6 +15,9 @@ import {
   Star,
   ChevronDown,
   ChevronUp,
+  PhoneCall,
+  Timer,
+  Radio,
   AlertTriangle,
   Layers,
   Brain,
@@ -275,6 +278,9 @@ export default function AIAgentsPage() {
         <SummaryCard icon={Target} label="Avg Accuracy" value={`${summaryCards.avgAccuracy.toFixed(1)}%`} valueClass={accuracyColor(summaryCards.avgAccuracy)} />
         <SummaryCard icon={Star} label="Avg Satisfaction" value={`${summaryCards.avgSatisfaction.toFixed(1)}/5`} />
       </div>
+
+      {/* Live Calls Banner */}
+      <LiveCallsBanner />
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab((v ?? "roster") as typeof activeTab)}>
@@ -1262,4 +1268,139 @@ function MiniCard({ label, value, icon: Icon }: { label: string; value: number; 
       </CardContent>
     </Card>
   );
+}
+
+/* ─── Live Calls Banner ───────────────────────────────────────────────── */
+
+interface LiveCall {
+  id: string;
+  agentName: string;
+  callerName: string | null;
+  callerNumber: string;
+  durationSec: number;
+  status: "active" | "ringing" | "on-hold";
+  toolCalls: number;
+}
+
+function LiveCallsBanner() {
+  const [expanded, setExpanded] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+
+  // Demo data — in production, this polls /api/voice/sessions
+  const [liveCalls] = useState<LiveCall[]>([
+    {
+      id: "vs-demo-1",
+      agentName: "Alex",
+      callerName: "Mrs. Johnson",
+      callerNumber: "+1 (203) 555-0147",
+      durationSec: 183,
+      status: "active",
+      toolCalls: 2,
+    },
+  ]);
+
+  // Tick the elapsed counter every second for the live duration display
+  useEffect(() => {
+    if (liveCalls.length === 0) return;
+    const timer = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(timer);
+  }, [liveCalls.length]);
+
+  if (liveCalls.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04]">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between px-4 py-2.5 text-left"
+      >
+        <div className="flex items-center gap-3">
+          {/* Pulsing indicator */}
+          <span className="relative flex size-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500" />
+          </span>
+          <span className="text-xs font-medium text-emerald-400">
+            {liveCalls.length} Live Call{liveCalls.length !== 1 ? "s" : ""}
+          </span>
+          {/* Quick summary of first call */}
+          <span className="text-xs text-muted-foreground">
+            {liveCalls[0].agentName} — {liveCalls[0].callerName ?? liveCalls[0].callerNumber}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-xs text-muted-foreground">
+            {formatCallDuration(liveCalls[0].durationSec + elapsed)}
+          </span>
+          {expanded ? (
+            <ChevronUp className="size-3.5 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="size-3.5 text-muted-foreground" />
+          )}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-emerald-500/10 px-4 py-3 space-y-2">
+          {liveCalls.map((call) => (
+            <div
+              key={call.id}
+              className="flex items-center justify-between rounded-md bg-white/[0.02] px-3 py-2"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex size-7 items-center justify-center rounded-full bg-emerald-500/10">
+                  <PhoneCall className="size-3.5 text-emerald-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-foreground">
+                      {call.agentName}
+                    </span>
+                    <Radio className="size-3 text-emerald-400" />
+                    <span className="text-xs text-muted-foreground">
+                      {call.callerName ?? call.callerNumber}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <Timer className="size-2.5" />
+                      {formatCallDuration(call.durationSec + elapsed)}
+                    </span>
+                    {call.toolCalls > 0 && (
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <Zap className="size-2.5" />
+                        {call.toolCalls} tool calls
+                      </span>
+                    )}
+                    <Badge variant="outline" className="text-[9px] py-0 h-4 bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                      {call.status}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" className="h-6 text-[10px] text-muted-foreground">
+                <Eye className="size-3 mr-1" /> Monitor
+              </Button>
+            </div>
+          ))}
+
+          {/* Voice Pipeline Status */}
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-[10px] text-muted-foreground">
+              Voice Pipeline: OpenAI Realtime (gpt-realtime-mini) via Twilio Media Streams
+            </span>
+            <span className="text-[10px] text-emerald-400/60">
+              Server: Connected
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatCallDuration(totalSec: number): string {
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
