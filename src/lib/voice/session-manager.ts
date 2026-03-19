@@ -1,10 +1,11 @@
 /* ─── Voice Session Manager ────────────────────────────────────────────────
    Manages the lifecycle of a voice call session:
    1. Twilio WebSocket connects (incoming call)
-   2. Opens OpenAI Realtime WebSocket
-   3. Proxies audio bidirectionally (Twilio ↔ OpenAI)
-   4. Handles function calling (tool "ticks")
-   5. Tracks session state, usage, and tool calls
+   2. Twilio "start" event arrives with streamSid
+   3. THEN opens OpenAI Realtime WebSocket (guarantees streamSid is set)
+   4. Proxies audio bidirectionally (Twilio ↔ OpenAI)
+   5. Handles function calling (tool "ticks")
+   6. Tracks session state, usage, and tool calls
 
    Architecture:
    ┌──────────┐     ┌──────────────┐     ┌──────────────┐
@@ -13,6 +14,10 @@
    │          │     │  Streams     │     │  (this file) │     │ API        │
    └──────────┘     └──────────────┘     └──────────────┘     └────────────┘
                      G.711 µ-law          G.711 µ-law (no transcoding)
+
+   Key design: OpenAI connection is deferred until AFTER Twilio's "start"
+   event sets streamSid. This matches OpenAI's official Twilio demo and
+   prevents audio deltas from being silently dropped.
    ──────────────────────────────────────────────────────────────────────── */
 
 import WebSocket from "ws";
@@ -43,6 +48,7 @@ const LOG_EVENT_TYPES = [
   "response.done",
   "response.output_item.added",
   "response.output_item.done",
+  "response.audio.delta",         // beta name (some models still emit this)
   "response.output_audio.done",
   "response.output_audio_transcript.done",
   "response.function_call_arguments.done",
@@ -70,6 +76,10 @@ export function getSession(callSid: string): VoiceSession | undefined {
 /**
  * Handle an incoming Twilio Media Stream WebSocket connection.
  * This is the main entry point called by the WebSocket server.
+ *
+ * IMPORTANT: We do NOT connect to OpenAI here. We wait for Twilio's
+ * "start" event which provides streamSid, THEN connect to OpenAI.
+ * This guarantees audio deltas can always be forwarded to Twilio.
  *
  * @param twilioWs - WebSocket connection from Twilio Media Streams
  * @param config - Optional agent voice configuration (uses defaults if omitted)
@@ -103,226 +113,255 @@ export function handleMediaStream(
   let latestMediaTimestamp = 0;
   const markQueue: string[] = [];
 
-  console.log("[Voice] Twilio WebSocket connected — initializing session");
+  console.log("[Voice] Twilio WebSocket connected — waiting for start event");
 
-  /* ─── Open OpenAI Realtime WebSocket ────────────────────────────── */
-  const openaiUrl = `${OPENAI_REALTIME_URL}?model=${model}`;
-  openaiWs = new WebSocket(openaiUrl, {
-    headers: {
-      Authorization: `Bearer ${openaiKey}`,
-      "OpenAI-Beta": "realtime=v1",
-    },
-  });
+  /* ─── Connect to OpenAI Realtime API ───────────────────────────────
+     Called ONLY after Twilio's "start" event provides streamSid.
+     This is the key architectural fix: by deferring the OpenAI
+     connection, we guarantee streamSid is available before any
+     audio deltas arrive from OpenAI.
+     ─────────────────────────────────────────────────────────────── */
+  function connectToOpenAI() {
+    if (openaiWs) {
+      console.warn("[Voice] OpenAI already connected — skipping");
+      return;
+    }
 
-  /* ─── OpenAI: Connection opened ─────────────────────────────────── */
-  openaiWs.on("open", () => {
-    console.log("[Voice] Connected to OpenAI Realtime API");
+    const openaiUrl = `${OPENAI_REALTIME_URL}?model=${model}`;
+    console.log(`[Voice] Connecting to OpenAI Realtime (model=${model})`);
 
-    // Small delay to ensure connection stability before configuring
-    setTimeout(() => {
-      if (!openaiWs || openaiWs.readyState !== WebSocket.OPEN) return;
+    openaiWs = new WebSocket(openaiUrl, {
+      headers: {
+        Authorization: `Bearer ${openaiKey}`,
+        "OpenAI-Beta": "realtime=v1",
+      },
+    });
 
-      // Build system prompt — use caller info if available, else default
-      const systemPrompt =
-        config?.systemPrompt ?? buildDefaultPrompt(session?.callerNumber ?? "unknown");
+    /* ─── OpenAI: Connection opened ───────────────────────────────── */
+    openaiWs.on("open", () => {
+      console.log("[Voice] Connected to OpenAI Realtime API");
+      console.log(`[Voice] streamSid=${streamSid} (should be set)`);
 
-      // OpenAI Realtime API session.update — flat structure per API spec
-      // Model is set via URL param, NOT in session.update
-      // Audio format: g711_ulaw = Twilio's native µ-law encoding (no transcoding needed)
-      const sessionUpdate = {
-        type: "session.update",
-        session: {
-          modalities: ["text", "audio"],
-          input_audio_format: "g711_ulaw",
-          output_audio_format: "g711_ulaw",
-          input_audio_transcription: { model: "gpt-4o-mini-transcribe" },
-          turn_detection: {
-            type: "server_vad",
-            prefix_padding_ms: 300,
-            silence_duration_ms: 500,
-          },
-          voice,
-          instructions: systemPrompt,
-          tools,
-          temperature,
-        },
-      };
+      // Small delay to ensure connection stability before configuring
+      setTimeout(() => {
+        if (!openaiWs || openaiWs.readyState !== WebSocket.OPEN) return;
 
-      console.log("[Voice] Sending session.update to OpenAI");
-      openaiWs.send(JSON.stringify(sessionUpdate));
-    }, 250);
-  });
+        // Build system prompt — use caller info from session
+        const systemPrompt =
+          config?.systemPrompt ?? buildDefaultPrompt(session?.callerNumber ?? "unknown");
 
-  /* ─── OpenAI: Incoming messages ─────────────────────────────────── */
-  openaiWs.on("message", (data: WebSocket.RawData) => {
-    try {
-      const event = JSON.parse(data.toString());
-
-      // Debug logging for tracked event types
-      if (LOG_EVENT_TYPES.includes(event.type)) {
-        console.log(`[Voice] OpenAI event: ${event.type}`);
-      }
-
-      switch (event.type) {
-        /* ── Session configured ──────────────────────────────────── */
-        case "session.created":
-          console.log("[Voice] Session created by OpenAI");
-          break;
-
-        case "session.updated":
-          console.log("[Voice] Session configured successfully");
-          if (session) session.status = "active";
-
-          // Kick off the conversation — tell the AI to greet the caller.
-          // Without this, server_vad waits for user speech first, but
-          // the caller expects the receptionist to speak first.
-          if (openaiWs && openaiWs.readyState === WebSocket.OPEN) {
-            console.log("[Voice] Sending response.create to trigger initial greeting");
-            openaiWs.send(JSON.stringify({ type: "response.create" }));
-          }
-          break;
-
-        /* ── Audio output from AI → send to Twilio ───────────────── */
-        case "response.output_audio.delta":
-          if (event.delta && streamSid && twilioWs.readyState === WebSocket.OPEN) {
-            const audioDelta = {
-              event: "media",
-              streamSid,
-              media: {
-                payload: event.delta, // Already base64 from OpenAI — pass through directly
+        // OpenAI Realtime API session.update — nested structure matching
+        // Twilio's official integration guide (audio/pcmu = µ-law, no transcoding)
+        const sessionUpdate = {
+          type: "session.update",
+          session: {
+            type: "realtime",
+            model,
+            output_modalities: ["audio"],
+            audio: {
+              input: {
+                format: { type: "audio/pcmu" },
+                turn_detection: {
+                  type: "server_vad",
+                  prefix_padding_ms: 300,
+                  silence_duration_ms: 500,
+                },
               },
-            };
-            twilioWs.send(JSON.stringify(audioDelta));
+              output: {
+                format: { type: "audio/pcmu" },
+                voice,
+              },
+            },
+            instructions: systemPrompt,
+            tools,
+            temperature,
+          },
+        };
 
-            // Track response timing for interruption handling
-            if (responseStartTimestamp === null) {
-              responseStartTimestamp = latestMediaTimestamp;
+        console.log("[Voice] Sending session.update to OpenAI");
+        openaiWs!.send(JSON.stringify(sessionUpdate));
+      }, 250);
+    });
+
+    /* ─── OpenAI: Incoming messages ───────────────────────────────── */
+    openaiWs.on("message", (data: WebSocket.RawData) => {
+      try {
+        const event = JSON.parse(data.toString());
+
+        // Debug logging for tracked event types
+        if (LOG_EVENT_TYPES.includes(event.type)) {
+          console.log(`[Voice] OpenAI event: ${event.type}`);
+        }
+
+        switch (event.type) {
+          /* ── Session configured ──────────────────────────────────── */
+          case "session.created":
+            console.log("[Voice] Session created by OpenAI");
+            break;
+
+          case "session.updated":
+            console.log("[Voice] Session configured successfully");
+            if (session) session.status = "active";
+
+            // Kick off the conversation — tell the AI to greet the caller.
+            // Without this, server_vad waits for user speech first, but
+            // the caller expects the receptionist to speak first.
+            // streamSid is GUARANTEED to be set at this point because
+            // we deferred the OpenAI connection until after "start".
+            if (openaiWs && openaiWs.readyState === WebSocket.OPEN) {
+              console.log(
+                `[Voice] Sending response.create — streamSid=${streamSid} (ready to receive audio)`
+              );
+              openaiWs.send(JSON.stringify({ type: "response.create" }));
             }
+            break;
 
-            // Track the assistant item for potential interruption
-            if (event.item_id) {
-              lastAssistantItemId = event.item_id;
-            }
+          /* ── Audio output from AI → send to Twilio ───────────────── */
+          case "response.audio.delta":          // beta event name
+          case "response.output_audio.delta":   // GA event name
+            if (event.delta && streamSid && twilioWs.readyState === WebSocket.OPEN) {
+              const audioDelta = {
+                event: "media",
+                streamSid,
+                media: {
+                  payload: event.delta, // Already base64 from OpenAI — pass through directly
+                },
+              };
+              twilioWs.send(JSON.stringify(audioDelta));
 
-            // Send mark for interruption tracking
-            if (streamSid) {
-              const markName = `response-${Date.now()}`;
+              // Track response timing for interruption handling
+              if (responseStartTimestamp === null) {
+                responseStartTimestamp = latestMediaTimestamp;
+              }
+
+              // Track the assistant item for potential interruption
+              if (event.item_id) {
+                lastAssistantItemId = event.item_id;
+              }
+
+              // Send mark for interruption tracking
               twilioWs.send(
                 JSON.stringify({
                   event: "mark",
                   streamSid,
-                  mark: { name: markName },
                 })
               );
-              markQueue.push(markName);
-            }
-          }
-          break;
-
-        /* ── Function call completed — execute tool ──────────────── */
-        case "response.function_call_arguments.done": {
-          const { call_id, name, arguments: argsJson } = event;
-          console.log(`[Voice] Function call: ${name}(${argsJson})`);
-
-          const toolStart = Date.now();
-
-          // Execute the tool asynchronously
-          executeToolCall(name, argsJson).then((result) => {
-            const record: ToolCallRecord = {
-              id: call_id,
-              name,
-              arguments: argsJson,
-              output: result,
-              timestamp: new Date(),
-              durationMs: Date.now() - toolStart,
-            };
-
-            if (session) session.toolCalls.push(record);
-
-            // Send function result back to OpenAI
-            if (openaiWs && openaiWs.readyState === WebSocket.OPEN) {
-              // Step 1: Add function output to conversation
-              openaiWs.send(
-                JSON.stringify({
-                  type: "conversation.item.create",
-                  item: {
-                    type: "function_call_output",
-                    call_id,
-                    output: result,
-                  },
-                })
-              );
-
-              // Step 2: Trigger model to continue speaking with the result
-              openaiWs.send(JSON.stringify({ type: "response.create" }));
-            }
-          });
-          break;
-        }
-
-        /* ── Speech started — handle interruption ────────────────── */
-        case "input_audio_buffer.speech_started": {
-          console.log("[Voice] Caller started speaking (interruption)");
-          if (lastAssistantItemId) {
-            // Truncate the current assistant response
-            if (openaiWs && openaiWs.readyState === WebSocket.OPEN) {
-              openaiWs.send(
-                JSON.stringify({
-                  type: "conversation.item.truncate",
-                  item_id: lastAssistantItemId,
-                  content_index: 0,
-                  audio_end_ms: latestMediaTimestamp,
-                })
+            } else if (event.delta && !streamSid) {
+              // This should never happen with the deferred connection,
+              // but log it loudly if it does
+              console.error(
+                "[Voice] BUG: Audio delta arrived but streamSid is null! " +
+                  "This means the OpenAI connection was opened before Twilio start."
               );
             }
+            break;
 
-            // Clear Twilio's audio buffer
-            if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
-              twilioWs.send(
-                JSON.stringify({
-                  event: "clear",
-                  streamSid,
-                })
-              );
-            }
+          /* ── Function call completed — execute tool ──────────────── */
+          case "response.function_call_arguments.done": {
+            const { call_id, name, arguments: argsJson } = event;
+            console.log(`[Voice] Function call: ${name}(${argsJson})`);
+
+            const toolStart = Date.now();
+
+            // Execute the tool asynchronously
+            executeToolCall(name, argsJson).then((result) => {
+              const record: ToolCallRecord = {
+                id: call_id,
+                name,
+                arguments: argsJson,
+                output: result,
+                timestamp: new Date(),
+                durationMs: Date.now() - toolStart,
+              };
+
+              if (session) session.toolCalls.push(record);
+
+              // Send function result back to OpenAI
+              if (openaiWs && openaiWs.readyState === WebSocket.OPEN) {
+                // Step 1: Add function output to conversation
+                openaiWs.send(
+                  JSON.stringify({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "function_call_output",
+                      call_id,
+                      output: result,
+                    },
+                  })
+                );
+
+                // Step 2: Trigger model to continue speaking with the result
+                openaiWs.send(JSON.stringify({ type: "response.create" }));
+              }
+            });
+            break;
           }
 
-          responseStartTimestamp = null;
-          lastAssistantItemId = null;
-          break;
-        }
+          /* ── Speech started — handle interruption ────────────────── */
+          case "input_audio_buffer.speech_started": {
+            console.log("[Voice] Caller started speaking (interruption)");
+            if (lastAssistantItemId) {
+              // Truncate the current assistant response
+              if (openaiWs && openaiWs.readyState === WebSocket.OPEN) {
+                const elapsedMs = latestMediaTimestamp - (responseStartTimestamp ?? 0);
+                openaiWs.send(
+                  JSON.stringify({
+                    type: "conversation.item.truncate",
+                    item_id: lastAssistantItemId,
+                    content_index: 0,
+                    audio_end_ms: elapsedMs > 0 ? elapsedMs : 0,
+                  })
+                );
+              }
 
-        /* ── Response completed — track usage ────────────────────── */
-        case "response.done": {
-          if (event.response?.usage && session) {
-            session.usage.input += event.response.usage.input_tokens ?? 0;
-            session.usage.output += event.response.usage.output_tokens ?? 0;
-            session.usage.total += event.response.usage.total_tokens ?? 0;
+              // Clear Twilio's audio buffer
+              if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
+                twilioWs.send(
+                  JSON.stringify({
+                    event: "clear",
+                    streamSid,
+                  })
+                );
+              }
+            }
+
+            responseStartTimestamp = null;
+            lastAssistantItemId = null;
+            break;
           }
-          responseStartTimestamp = null;
-          break;
-        }
 
-        /* ── Error from OpenAI ───────────────────────────────────── */
-        case "error":
-          console.error("[Voice] OpenAI error:", JSON.stringify(event, null, 2));
-          if (session) session.status = "error";
-          break;
+          /* ── Response completed — track usage ────────────────────── */
+          case "response.done": {
+            if (event.response?.usage && session) {
+              session.usage.input += event.response.usage.input_tokens ?? 0;
+              session.usage.output += event.response.usage.output_tokens ?? 0;
+              session.usage.total += event.response.usage.total_tokens ?? 0;
+            }
+            responseStartTimestamp = null;
+            break;
+          }
+
+          /* ── Error from OpenAI ───────────────────────────────────── */
+          case "error":
+            console.error("[Voice] OpenAI error:", JSON.stringify(event, null, 2));
+            if (session) session.status = "error";
+            break;
+        }
+      } catch (err) {
+        console.error("[Voice] Error processing OpenAI message:", err);
       }
-    } catch (err) {
-      console.error("[Voice] Error processing OpenAI message:", err);
-    }
-  });
+    });
 
-  openaiWs.on("close", () => {
-    console.log("[Voice] OpenAI WebSocket closed");
-    endSession("openai_disconnect");
-  });
+    openaiWs.on("close", () => {
+      console.log("[Voice] OpenAI WebSocket closed");
+      endSession("openai_disconnect");
+    });
 
-  openaiWs.on("error", (err) => {
-    console.error("[Voice] OpenAI WebSocket error:", err);
-    if (session) session.status = "error";
-  });
+    openaiWs.on("error", (err) => {
+      console.error("[Voice] OpenAI WebSocket error:", err);
+      if (session) session.status = "error";
+    });
+  }
 
   /* ─── Twilio: Incoming messages ─────────────────────────────────── */
   twilioWs.on("message", (message: WebSocket.RawData) => {
@@ -359,6 +398,9 @@ export function handleMediaStream(
           console.log(
             `[Voice] Stream started — callSid=${callSid}, streamSid=${streamSid}`
           );
+
+          // NOW connect to OpenAI — streamSid is guaranteed set
+          connectToOpenAI();
           break;
         }
 
