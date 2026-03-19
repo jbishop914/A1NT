@@ -1080,3 +1080,102 @@ export const clientWebsites: ClientWebsite[] = [
     },
   },
 ];
+
+// ═══════════════════════════════════════════════════════════════════
+// AI RESEARCH — Saved research articles from Perplexity integration
+// ═══════════════════════════════════════════════════════════════════
+
+export type ResearchSource = "ai-research" | "ai-quick" | "ai-deep";
+export type ResearchStatus = "Saved" | "Published" | "Archived";
+
+export interface SavedResearch {
+  id: string;
+  title: string;
+  query: string;
+  summary: string;
+  citations: { title: string; url: string }[];
+  tags: string[];
+  category: string;
+  source: ResearchSource;
+  status: ResearchStatus;
+  savedBy: string;
+  savedAt: string;
+  views: number;
+  helpful: number;
+}
+
+export const sampleSavedResearch: SavedResearch[] = [
+  {
+    id: "res-1",
+    title: "R-454B Refrigerant Transition Guide",
+    query: "R-454B refrigerant replacement for R-410A HVAC 2026 regulations",
+    summary: "R-454B (Opteon XL41) is the leading replacement for R-410A, mandated by EPA AIM Act for new residential HVAC systems starting January 1, 2025. Key points: GWP of 466 vs R-410A's 2,088. Mildly flammable (A2L classification) — requires updated safety protocols and leak detectors. Operating pressures are similar to R-410A, making equipment transition smoother. Carrier, Trane, and Daikin have all released R-454B-compatible equipment lines. Technicians need EPA Section 608 certification update for A2L handling. Existing R-410A systems can be serviced with R-410A until end-of-life.",
+    citations: [
+      { title: "EPA AIM Act Implementation", url: "https://www.epa.gov/climate-hfcs-reduction/aim-act" },
+      { title: "ASHRAE 34 Safety Classification", url: "https://www.ashrae.org/technical-resources/standards-and-guidelines" },
+      { title: "Carrier R-454B FAQ", url: "https://www.carrier.com/residential/en/us/r-454b/" },
+    ],
+    tags: ["HVAC", "Refrigerant", "R-454B", "Regulations", "EPA"],
+    category: "HVAC",
+    source: "ai-research",
+    status: "Published",
+    savedBy: "Mike Rodriguez",
+    savedAt: "2026-03-15",
+    views: 34,
+    helpful: 12,
+  },
+  {
+    id: "res-2",
+    title: "2026 NEC Code Changes for Residential Electrical",
+    query: "2026 NEC national electrical code changes residential",
+    summary: "The 2026 NEC introduces several key changes affecting residential work: expanded GFCI requirements now cover all 125V-250V outlets in kitchens, bathrooms, and laundry areas. New tamper-resistant receptacle requirements extend to all dwelling unit locations. Enhanced surge protection now required for all dwelling services. Updated EV charging circuit provisions require a dedicated 240V/50A circuit in new construction garages. Arc-fault circuit interrupter (AFCI) protection extended to all living areas including basements and attached garages.",
+    citations: [
+      { title: "NFPA 70 - National Electrical Code", url: "https://www.nfpa.org/codes-and-standards/nfpa-70" },
+      { title: "EC&M NEC 2026 Preview", url: "https://www.ecmag.com/section/codes-standards" },
+    ],
+    tags: ["Electrical", "NEC", "Code", "2026", "Residential"],
+    category: "Electrical",
+    source: "ai-deep",
+    status: "Published",
+    savedBy: "Dave Sullivan",
+    savedAt: "2026-03-12",
+    views: 28,
+    helpful: 9,
+  },
+  {
+    id: "res-3",
+    title: "Proper Brazing Techniques for ACR Copper",
+    query: "best practices brazing ACR copper tubing HVAC refrigeration",
+    summary: "Key brazing practices for ACR (Air Conditioning & Refrigeration) copper tubing: Always flow nitrogen through the joint during brazing at 2-5 CFH to prevent oxide scale buildup inside the tube. Use BCuP-6 (Sil-Fos 6%) for copper-to-copper joints — no flux needed. For copper-to-brass, use BAg-5 with flux. Heat the tube, not the fitting — capillary action draws the alloy in. Target cherry-red color (1,100-1,500°F). Post-braze: maintain nitrogen flow until joint cools below 500°F. Leak test with electronic detector and 150 PSI nitrogen hold for 24 hours minimum.",
+    citations: [
+      { title: "HVAC School - Brazing Basics", url: "https://hvacrschool.com/brazing-basics/" },
+      { title: "Harris Products Brazing Guide", url: "https://www.harrisproductsgroup.com/en/Expert-Advice/tech-tips" },
+    ],
+    tags: ["HVAC", "Brazing", "Copper", "Refrigeration", "Best Practices"],
+    category: "HVAC",
+    source: "ai-research",
+    status: "Saved",
+    savedBy: "Lisa Kim",
+    savedAt: "2026-03-18",
+    views: 5,
+    helpful: 2,
+  },
+  {
+    id: "res-4",
+    title: "Plumbing Permit Requirements by State — 2026",
+    query: "plumbing permit requirements homeowner vs contractor 2026 state regulations",
+    summary: "Plumbing permit requirements vary significantly by state and municipality. Most states require permits for any work involving water supply, drain/waste/vent (DWV) modifications, water heater installation, or gas piping. Some states (FL, TX, CA) allow homeowner permits for their primary residence but still require licensed contractor for gas work. Typical permit fees range $50-$500 depending on scope. Inspection usually required within 24-48 hours of rough-in and again at final. Working without permits can void insurance claims and create liability at sale. Always check local jurisdiction — county requirements often differ from state minimums.",
+    citations: [
+      { title: "PHCC - Plumbing Code Resources", url: "https://www.phccweb.org/advocacy/codes-and-standards/" },
+      { title: "ICC Building Codes", url: "https://www.iccsafe.org/building-safety-journal/" },
+    ],
+    tags: ["Plumbing", "Permits", "Regulations", "Compliance"],
+    category: "Plumbing",
+    source: "ai-quick",
+    status: "Published",
+    savedBy: "Sarah Chen",
+    savedAt: "2026-03-10",
+    views: 42,
+    helpful: 15,
+  },
+];

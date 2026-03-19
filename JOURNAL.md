@@ -860,3 +860,88 @@ Continuation of Website Builder work. Josh confirmed the builder UI is deploymen
 - P4: Import & Onboarding, AI Agents
 
 ---
+
+## Session 10 — Perplexity AI Integration: KB Research + Service Layer
+**Date:** March 19, 2026
+**Focus:** Integrate Perplexity Search API + Agent API into the platform — typed service layer, API routes, and AI Research tab in Documents & KB module
+
+### Goals
+1. Deep-dive Perplexity API documentation (Chat Completions, Search API, Agent API, presets, tools)
+2. Build typed service layer abstracting all three Perplexity API surfaces
+3. Create API routes for search, ask (agent), and save-to-KB
+4. Add "AI Research" tab to Documents & KB with search bar, mode selector, result rendering, and save-to-KB flow
+5. Add sample saved research data for demo purposes
+6. Visual QA + commit
+
+### Work Produced
+
+**New file: `src/lib/perplexity.ts`** — Typed Perplexity API service layer
+- `PerplexityConfig` type with model overrides, API key injection
+- `PerplexitySearchClient` — wraps the Search API (completions endpoint with `search_recency_filter`, `return_related_questions`)
+- `PerplexityAgentClient` — wraps the Agent API with preset support (fast-search, pro-search, deep-research)
+- `PerplexitySonarClient` — wraps Sonar models for embeddings / lightweight inference
+- `createPerplexityClients()` factory function for environment-driven config
+- Helper: `searchAndSummarize()` — full pipeline: search → summarize → format for KB storage
+- Helper: `formatForKB()` — transforms API responses into KB article format with auto-tags and citations
+
+**New file: `src/app/api/ai/search/route.ts`** — Search API proxy
+- POST handler accepting `{ query, filters?, recency? }`
+- Returns typed search results with citations, related questions
+
+**New file: `src/app/api/ai/ask/route.ts`** — Agent API route
+- POST handler accepting `{ query, mode: "quick" | "research" | "deep" }`
+- Maps modes to Perplexity presets (fast-search, pro-search, deep-research)
+- Returns answer with citations and source results
+
+**New file: `src/app/api/ai/save-to-kb/route.ts`** — Save research to KB
+- POST handler accepting research data
+- Demo mode: returns success with generated ID
+- TODO comment for Prisma integration when DB is connected
+
+**Extended: `src/lib/sample-data-p3.ts`**
+- Added `SavedResearch` interface with fields: id, title, query, summary, citations, tags, category, source, savedBy, savedAt, status, viewCount, citationCount
+- Added `ResearchSource` type union: `"ai-quick" | "ai-research" | "ai-deep" | "manual" | "import"`
+- 4 sample entries:
+  - R-454B Refrigerant Transition Guide (Research mode, HVAC tags)
+  - 2026 NEC Code Changes for Residential Electrical (Deep mode, Electrical tags)
+  - Proper Brazing Techniques for ACR Copper (Research mode, HVAC tags)
+  - Plumbing Permit Requirements by State — 2026 (Quick mode, Plumbing tags)
+- Each entry includes realistic summary content with markdown formatting, citations with URLs, and auto-extracted tags
+
+**Rewrote: `src/app/dashboard/documents/page.tsx`**
+- Added third tab: "AI Research" alongside Documents and Knowledge Base
+- Summary card row now includes "AI Research" count (4 items, 3 published)
+- AI Research tab features:
+  - "AI-Powered Research — Powered by Perplexity" header
+  - Search bar with contextual placeholder examples
+  - Mode selector dropdown (Quick / Research / Deep) with description labels
+  - Search button with loading state (spinner animation)
+  - AI response card: query title, mode badge, date, markdown-rendered summary
+  - Inline markdown rendering: headings (##, ###), bold (**text**), bullets (- item), numbered lists (1. item), and clickable links ([text](url))
+  - "Save to KB" button with success confirmation
+  - Sources section with numbered references, external link icons, dates, snippets
+  - Saved research grid: filterable cards with status badges (Published/Saved), category tags, author, citation count, view count
+  - Detail sheet (slide-out): full research content, citations list, metadata
+  - Search filter for saved research
+- Graceful degradation: API call attempted first, falls back to demo simulation when no PERPLEXITY_API_KEY is set
+- `renderInline()` helper: parses bold + markdown links into React elements
+
+### Architecture Decisions
+- **Three-tier API design:** Service layer (`perplexity.ts`) → API routes (`/api/ai/*`) → Client components. Clean separation of concerns.
+- **Preset mapping:** Quick → `fast-search`, Research → `pro-search`, Deep → `deep-research`. Maps to Perplexity's official presets.
+- **Demo simulation:** When API key isn't configured, the UI falls back to a simulated response explaining how to set up the API key. This lets the dashboard work in demo/development mode.
+- **Save-to-KB flow:** Creates a `SavedResearch` object with auto-extracted tags (keyword matching against HVAC/plumbing/electrical vocabulary), preserved citations, and category assignment. Ready for Prisma persistence.
+- **Service layer covers all three APIs:** Search, Agent, and Sonar — future-proofing for Module 16 (AI Agent Employees) which will use the Agent API as its backbone.
+
+### Build Status
+- `tsc --noEmit` — clean, zero errors
+- `npm run build` — clean, all 15 dashboard routes render
+- Visual QA via Playwright — all elements render correctly (search bar, mode selector, response card, saved research grid, detail sheet)
+
+### Up Next
+- Connect Perplexity API key via Vercel env var for live search
+- Module 16: AI Agent Employees — leverage the Agent API service layer for autonomous agent workflows
+- Prisma migration for SavedResearch table when DB is connected
+- Import & Onboarding module (P4)
+
+---
