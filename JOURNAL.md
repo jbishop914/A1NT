@@ -1310,7 +1310,7 @@ Critical bug-fixing session followed by major Command Center customization. User
 ### Commits
 - `89fb061` — Fix navigation crash: proper MapboxDraw cleanup + error boundary
 - `6e4d318` — Fix 3D extrusions: fill-extrusion-opacity doesn't support data-driven expressions
-- `xxxxxxx` — Map settings + Command Center background/logo customization
+- `73eabe0` — Map settings + Command Center background/logo customization
 
 ### Files Changed
 - `src/lib/command-center-store.ts` (new) — Settings types, defaults, persistence, style catalogue
@@ -1328,5 +1328,29 @@ Critical bug-fixing session followed by major Command Center customization. User
 - Test Twilio phone system end-to-end
 - Three.js + Mapbox custom layer for GLB rendering (deferred)
 - Explore additional Mapbox style options / custom styles
+
+---
+
+## Session 15 — March 19, 2026
+
+### Context
+Continuation of Session 14. The right-click "Set as Default View" context menu was conflicting with Mapbox's built-in right-click-drag pitch/bearing control — a quick right-click showed nothing because Mapbox was consuming the event.
+
+### Work Completed
+
+#### Right-Click Context Menu Fix
+- **Problem:** Mapbox GL uses right-click-drag to adjust pitch/bearing. Our context menu listener was fighting with this — quick right-clicks produced no menu, while right-click-and-hold still triggered the angle adjustment.
+- **Solution:** Track `mousedown` position and timestamp on the map canvas. On `contextmenu` event, calculate movement distance and duration. Only show the custom context menu if the gesture was a quick tap (< 4px movement AND < 400ms hold). If the user dragged or held longer, the event passes through to Mapbox for pitch/bearing adjustment.
+- **Also added:** 50ms dismiss delay on the context menu so the triggering right-click event doesn't immediately close it via the global mousedown listener.
+
+### Commits
+- `8bd3559` — fix: right-click context menu no longer conflicts with Mapbox pitch/bearing drag
+
+### Files Changed
+- `src/components/map-settings.tsx` — Added mousedown tracking, distance/duration thresholds, dismiss delay
+
+### Next Up
+- Test Twilio phone system end-to-end (pending since Session 13)
+- Three.js + Mapbox custom layer for GLB rendering (deferred)
 
 ---
