@@ -123,11 +123,52 @@ function escapeXml(str: string): string {
 const wss = new WebSocketServer({ server, path: MEDIA_STREAM_PATH });
 
 wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
-  console.log(`[Voice] WebSocket connection from ${req.socket.remoteAddress}`);
+  const reqUrl = req.url ?? "";
+  console.log(`[Voice] WebSocket connection from ${req.socket.remoteAddress} — ${reqUrl}`);
 
-  // The session manager handles the full lifecycle:
-  // Twilio audio → OpenAI Realtime → function calling → audio back to Twilio
-  handleMediaStream(ws);
+  // Parse outbound call context from URL query parameters
+  // Outbound calls include: ?direction=outbound&campaign=xxx&context=base64url&recordId=xxx
+  const urlParams = new URLSearchParams(reqUrl.split("?")[1] ?? "");
+  const direction = urlParams.get("direction") ?? "inbound";
+  const campaignType = urlParams.get("campaign") ?? null;
+  const contextB64 = urlParams.get("context") ?? null;
+  const recordId = urlParams.get("recordId") ?? null;
+
+  let campaignContext: import("./campaign-prompts").CampaignContext | null = null;
+  if (contextB64) {
+    try {
+      campaignContext = JSON.parse(Buffer.from(contextB64, "base64url").toString("utf-8"));
+      console.log(`[Voice] Outbound campaign: ${campaignType}`, campaignContext);
+    } catch (e) {
+      console.warn("[Voice] Failed to parse campaign context:", e);
+    }
+  }
+
+  // Build config for outbound calls with campaign prompt
+  if (direction === "outbound" && campaignContext) {
+    import("./campaign-prompts").then(({ buildOutboundPrompt }) => {
+      const prompt = buildOutboundPrompt(campaignContext);
+      const config: Parameters<typeof handleMediaStream>[1] = {
+        systemPrompt: prompt,
+        direction: "outbound",
+        campaignType: campaignType ?? undefined,
+        recordId: recordId ?? undefined,
+      };
+      console.log(`[Voice] Using outbound prompt for campaign: ${campaignType}`);
+      handleMediaStream(ws, config);
+    }).catch((err) => {
+      console.error("[Voice] Failed to load campaign-prompts:", err);
+      // Fallback: start session without campaign context
+      handleMediaStream(ws, {
+        direction: "outbound",
+        campaignType: campaignType ?? undefined,
+        recordId: recordId ?? undefined,
+      });
+    });
+  } else {
+    // Inbound call — no campaign context needed
+    handleMediaStream(ws);
+  }
 });
 
 wss.on("error", (err) => {

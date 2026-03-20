@@ -344,6 +344,53 @@ interface QuickDialSheetProps {
   onSuccess: () => void;
 }
 
+/* ── Campaign context field definitions ───────────────────────────── */
+
+interface CampaignField {
+  key: string;
+  label: string;
+  placeholder: string;
+  type?: "text" | "number" | "date" | "time";
+}
+
+const campaignFields: Record<CampaignType, CampaignField[]> = {
+  "appointment-confirm": [
+    { key: "date", label: "Appointment Date", placeholder: "e.g. March 25, 2026", type: "text" },
+    { key: "time", label: "Appointment Time", placeholder: "e.g. 10:00 AM", type: "text" },
+    { key: "serviceType", label: "Service Type", placeholder: "e.g. Drain cleaning" },
+    { key: "technicianName", label: "Technician", placeholder: "e.g. Mike" },
+    { key: "address", label: "Service Address", placeholder: "e.g. 123 Main St" },
+  ],
+  "appointment-reschedule": [
+    { key: "originalDate", label: "Original Date", placeholder: "e.g. March 20, 2026" },
+    { key: "reason", label: "Reason for Reschedule", placeholder: "e.g. Technician unavailable" },
+  ],
+  "pre-service-info": [
+    { key: "serviceType", label: "Service Type", placeholder: "e.g. Water heater install" },
+    { key: "date", label: "Scheduled Date", placeholder: "e.g. March 25, 2026" },
+  ],
+  "post-service-followup": [
+    { key: "serviceType", label: "Service Performed", placeholder: "e.g. Pipe repair" },
+    { key: "technicianName", label: "Technician Name", placeholder: "e.g. Mike" },
+    { key: "completedDate", label: "Completed Date", placeholder: "e.g. March 18, 2026" },
+  ],
+  "invoice-followup": [
+    { key: "invoiceNumber", label: "Invoice #", placeholder: "e.g. INV-1042" },
+    { key: "amount", label: "Amount Due", placeholder: "e.g. 450.00", type: "number" },
+    { key: "daysOverdue", label: "Days Overdue", placeholder: "e.g. 14", type: "number" },
+    { key: "dueDate", label: "Due Date", placeholder: "e.g. March 5, 2026" },
+    { key: "serviceDescription", label: "Service Description", placeholder: "e.g. Kitchen faucet replacement" },
+  ],
+  "seasonal-promo": [
+    { key: "promotionName", label: "Promotion Name", placeholder: "e.g. Spring AC Tune-Up" },
+    { key: "discount", label: "Discount / Offer", placeholder: "e.g. 20% off" },
+    { key: "validUntil", label: "Valid Until", placeholder: "e.g. April 30, 2026" },
+    { key: "description", label: "Description", placeholder: "e.g. Full system inspection + cleaning" },
+  ],
+  "sales-prospecting": [],
+  custom: [],
+};
+
 function QuickDialSheet({ onSuccess }: QuickDialSheetProps) {
   const [open, setOpen] = React.useState(false);
   const [contactName, setContactName] = React.useState("");
@@ -352,8 +399,18 @@ function QuickDialSheet({ onSuccess }: QuickDialSheetProps) {
   const [agentId, setAgentId] = React.useState<string>("unassigned");
   const [priority, setPriority] = React.useState<CallPriority>("normal");
   const [notes, setNotes] = React.useState("");
+  const [contextData, setContextData] = React.useState<Record<string, string>>({});
   const [submitting, setSubmitting] = React.useState(false);
   const [feedback, setFeedback] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  // Reset context fields when campaign type changes
+  React.useEffect(() => {
+    setContextData({});
+  }, [campaign]);
+
+  function updateContextField(key: string, value: string) {
+    setContextData((prev) => ({ ...prev, [key]: value }));
+  }
 
   function resetForm() {
     setContactName("");
@@ -362,6 +419,7 @@ function QuickDialSheet({ onSuccess }: QuickDialSheetProps) {
     setAgentId("unassigned");
     setPriority("normal");
     setNotes("");
+    setContextData({});
     setFeedback(null);
   }
 
@@ -389,6 +447,7 @@ function QuickDialSheet({ onSuccess }: QuickDialSheetProps) {
           assignedAgentName: selectedAgent ? selectedAgent.name : null,
           priority,
           notes: notes.trim(),
+          contextData: Object.keys(contextData).length > 0 ? contextData : undefined,
           dialNow,
         }),
       });
@@ -507,6 +566,34 @@ function QuickDialSheet({ onSuccess }: QuickDialSheetProps) {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Campaign Context Fields (dynamic based on campaign type) */}
+          {campaignFields[campaign]?.length > 0 && (
+            <div className="rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-3">
+              <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                Campaign Details
+              </p>
+              <div className="flex flex-col gap-3">
+                {campaignFields[campaign].map((field) => (
+                  <div key={field.key} className="flex flex-col gap-1">
+                    <Label htmlFor={`ctx-${field.key}`} className="text-xs text-zinc-500">
+                      {field.label}
+                    </Label>
+                    <Input
+                      id={`ctx-${field.key}`}
+                      type={field.type ?? "text"}
+                      placeholder={field.placeholder}
+                      value={contextData[field.key] ?? ""}
+                      onChange={(e) => updateContextField(field.key, e.target.value)}
+                      className="h-8 bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-700 text-sm"
+                      data-testid={`qdial-ctx-${field.key}`}
+                      disabled={submitting}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Agent Assignment */}
           <div className="flex flex-col gap-1.5">

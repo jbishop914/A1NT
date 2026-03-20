@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       const dbStatus = STATUS_MAP[callStatus] ?? "COMPLETED";
       
       try {
-        await db.callRecord.update({
+        const updatedRecord = await db.callRecord.update({
           where: { callSid },
           data: {
             status: dbStatus,
@@ -54,6 +54,43 @@ export async function POST(request: NextRequest) {
           },
         });
         console.log(`[Voice] Call record ${callSid} updated: status=${dbStatus}`);
+
+        // Also update the linked OutboundQueueItem if this was an outbound call
+        if (updatedRecord.direction === "OUTBOUND") {
+          try {
+            // Map call status to queue outcome
+            const outcomeMap: Record<string, string> = {
+              completed: "ANSWERED",
+              failed: "NO_ANSWER",
+              busy: "BUSY",
+              "no-answer": "NO_ANSWER",
+              canceled: "NO_ANSWER",
+            };
+
+            const queueStatus = dbStatus === "COMPLETED" ? "COMPLETED" : "FAILED";
+            const outcome = outcomeMap[callStatus] ?? "NO_ANSWER";
+
+            // Find the OutboundQueueItem linked to this CallRecord
+            const queueItem = await db.outboundQueueItem.findUnique({
+              where: { callRecordId: updatedRecord.id },
+            });
+
+            if (queueItem) {
+              await db.outboundQueueItem.update({
+                where: { id: queueItem.id },
+                data: {
+                  status: queueStatus as any,
+                  outcome: outcome as any,
+                  completedAt: new Date(),
+                  duration: duration ? parseInt(duration, 10) : null,
+                },
+              });
+              console.log(`[Voice] OutboundQueueItem ${queueItem.id} updated: status=${queueStatus}, outcome=${outcome}`);
+            }
+          } catch (queueErr) {
+            console.log(`[Voice] Could not update OutboundQueueItem for call ${callSid}:`, queueErr);
+          }
+        }
       } catch (err) {
         // Record might not exist yet (race condition) or might have been created
         // by the voice server's endSession(). That's fine — log and continue.

@@ -141,7 +141,7 @@ export async function initiateOutboundCall(
       From: fromNumber,
       To: targetNumber,
       Twiml: twiml,
-      StatusCallback: `https://${process.env.VERCEL_URL ?? "a1ntegrel.vercel.app"}/api/voice/status`,
+      StatusCallback: `https://a1ntegrel.vercel.app/api/voice/status`,
       StatusCallbackMethod: "POST",
       StatusCallbackEvent: "initiated ringing answered completed",
     });

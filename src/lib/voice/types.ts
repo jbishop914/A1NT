@@ -33,6 +33,10 @@ export interface AgentVoiceConfig {
   vadMode: VadMode;
   systemPrompt: string;
   tools: RealtimeTool[];
+  // Outbound call context (set by voice-server.ts for outbound calls)
+  direction?: "inbound" | "outbound";
+  campaignType?: string;
+  recordId?: string;
 }
 
 export interface RealtimeTool {

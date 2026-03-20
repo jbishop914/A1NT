@@ -160,6 +160,47 @@ export async function updateCallRecord(
   }
 }
 
+/**
+ * Update a call record by ID (used for outbound calls where outbound.ts
+ * already created the record and session-manager fills in the details).
+ */
+export async function updateCallRecordById(
+  id: string,
+  input: CallRecordInput
+): Promise<string> {
+  try {
+    await db.callRecord.update({
+      where: { id },
+      data: {
+        streamSid: input.streamSid,
+        callerName: input.callerName,
+        callerCity: input.callerCity,
+        callerState: input.callerState,
+        status: input.status as CallStatus,
+        intent: input.intent as CallIntent | null,
+        priority: input.priority as CallPriority,
+        sentiment: input.sentiment as CallSentiment | null,
+        endedAt: input.endedAt,
+        duration: input.duration,
+        transcript: input.transcript as unknown as any,
+        summary: input.summary,
+        toolCalls: input.toolCalls as unknown as any,
+        actionsTaken: input.actionsTaken,
+        appointmentBooked: input.appointmentBooked,
+        isNewCustomer: input.isNewCustomer,
+        tokensInput: input.tokensInput,
+        tokensOutput: input.tokensOutput,
+        tokensTotal: input.tokensTotal,
+      },
+    });
+    console.log(`[CallStore] Updated outbound call record: ${id}`);
+    return id;
+  } catch (err) {
+    console.error(`[CallStore] Failed to update outbound call record (id=${id}):`, err);
+    throw err;
+  }
+}
+
 /* ─── Read Operations (dashboard API) ─────────────────────────────────── */
 
 /**

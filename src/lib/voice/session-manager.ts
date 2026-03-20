@@ -35,6 +35,7 @@ import { AGENT_TOOLS, executeToolCall } from "./tools";
 import { buildDefaultPrompt } from "./prompts";
 import {
   createCallRecord,
+  updateCallRecordById,
   type CallRecordInput,
   type TranscriptTurn,
   type StoredToolCall,
@@ -619,6 +620,9 @@ export function handleMediaStream(
       // For now, use env var or default demo org.
       const orgId = process.env.A1NT_ORG_ID ?? "demo-org";
 
+      const isOutbound = config?.direction === "outbound";
+      const finalStatus = reason === "twilio_stop" || reason === "twilio_disconnect" ? "COMPLETED" : "FAILED";
+
       const callRecordInput: CallRecordInput = {
         organizationId: orgId,
         callSid: session.callSid,
@@ -627,8 +631,8 @@ export function handleMediaStream(
         callerName: customerName ?? session.callerName,
         callerCity,
         callerState,
-        direction: "INBOUND",
-        status: reason === "twilio_stop" || reason === "twilio_disconnect" ? "COMPLETED" : "FAILED",
+        direction: isOutbound ? "OUTBOUND" : "INBOUND",
+        status: finalStatus,
         intent: inferIntent(),
         priority: inferPriority(),
         sentiment: null, // Phase 2: post-call sentiment analysis
@@ -659,9 +663,18 @@ export function handleMediaStream(
         tokensTotal: session.usage.total,
       };
 
-      createCallRecord(callRecordInput)
-        .then((id) => console.log(`[Voice] Call record persisted to DB: ${id}`))
-        .catch((err) => console.error("[Voice] Failed to persist call record:", err));
+      if (isOutbound && config?.recordId) {
+        // Outbound calls: outbound.ts already created the CallRecord.
+        // UPDATE it instead of creating a duplicate.
+        updateCallRecordById(config.recordId, callRecordInput)
+          .then((id) => console.log(`[Voice] Outbound call record updated: ${id}`))
+          .catch((err) => console.error("[Voice] Failed to update outbound call record:", err));
+      } else {
+        // Inbound calls: create a fresh CallRecord.
+        createCallRecord(callRecordInput)
+          .then((id) => console.log(`[Voice] Call record persisted to DB: ${id}`))
+          .catch((err) => console.error("[Voice] Failed to persist call record:", err));
+      }
 
       // Keep in activeSessions for 5 minutes for status queries, then clean up
       if (callSid) {

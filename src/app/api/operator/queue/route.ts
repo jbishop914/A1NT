@@ -164,6 +164,7 @@ export async function POST(request: NextRequest) {
       assignedAgentName,
       priority = "normal",
       notes = "",
+      contextData,
       scheduledTime,
       dialNow = false,
     } = body;
@@ -196,6 +197,7 @@ export async function POST(request: NextRequest) {
         assignedAgentName: assignedAgentName || null,
         priority: (priorityToDb[priority] ?? "NORMAL") as any,
         notes,
+        contextData: contextData ?? null,
         scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
         status: dialNow ? ("IN_PROGRESS" as any) : scheduledTime ? ("SCHEDULED" as any) : ("QUEUED" as any),
       },
@@ -221,7 +223,7 @@ export async function POST(request: NextRequest) {
         targetNumber: contactPhone,
         campaignType: voiceCampaign,
         recipientName: contactName,
-        contextData: { notes, queueItemId: item.id },
+        contextData: { ...contextData, notes, queueItemId: item.id },
         organizationId: orgId,
       });
 

@@ -1886,3 +1886,60 @@ Wired the entire Operator module to real PostgreSQL data via 5 new API routes. A
 Active/live areas show only real database data. Empty states guide the user to take action. Historical/completed data uses sample examples to demonstrate what completed calls look like.
 
 ---
+
+## Session 19c — March 20, 2026
+
+### Context
+User tested outbound calling and found 3 bugs: (1) no campaign detail fields in Quick Dial, (2) Twilio plays "application error" when outbound call connects, (3) queue item stays stuck as pending after call disconnects.
+
+### Root Cause Analysis
+1. **Application error on call**: Voice server's `voice-server.ts` used `require("./campaign-prompts")` (CommonJS) which could fail in ESM contexts. More critically, `session-manager.ts` hardcoded `direction: "INBOUND"` for ALL calls, causing outbound call records to be mislabeled. Also, outbound.ts used `process.env.VERCEL_URL` for StatusCallback which resolves to deployment-specific URLs instead of the stable domain.
+2. **Stuck pending status**: The status callback (`/api/voice/status`) updated the `CallRecord` when Twilio reported call completion, but never propagated the status to the linked `OutboundQueueItem`. The queue item stayed in IN_PROGRESS forever.
+3. **Missing campaign fields**: Quick Dial sheet had no way to enter campaign-specific context (appointment date/time, invoice number, promo details). The AI agent was flying blind with no context.
+
+### Fixes Applied
+
+**session-manager.ts:**
+- Changed `direction: "INBOUND"` to use `config?.direction` — outbound calls now correctly labeled
+- For outbound calls, UPDATE the existing CallRecord (via `recordId`) instead of creating a duplicate (outbound.ts already creates one at initiation)
+- Added `updateCallRecordById()` to call-store.ts for by-ID updates
+
+**voice-server.ts:**
+- Replaced `require("./campaign-prompts")` with ESM-safe `import("./campaign-prompts")`
+- Typed `campaignContext` as `CampaignContext` instead of `Record<string, unknown>`
+- Split inbound/outbound WebSocket handling — outbound loads campaign prompt async then starts session
+
+**Status callback (`/api/voice/status`):**
+- After updating CallRecord, looks up linked OutboundQueueItem (via `callRecordId`)
+- Updates queue item status (COMPLETED/FAILED), outcome (ANSWERED/NO_ANSWER/BUSY), completedAt, and duration
+- Queue items now properly transition out of IN_PROGRESS
+
+**outbound.ts:**
+- Hardcoded `a1ntegrel.vercel.app` for StatusCallback URL instead of `process.env.VERCEL_URL` (which resolves to deployment-specific URLs like `a1ntegrel-xxx.vercel.app`)
+
+**Quick Dial UI (`outbound-queue-tab.tsx`):**
+- Added `campaignFields` config mapping each campaign type to its context fields
+- Dynamic "Campaign Details" section renders appropriate fields when a campaign is selected
+- Fields: appointment-confirm (date, time, service, tech, address), invoice-followup (invoice #, amount, days overdue, due date, description), seasonal-promo (name, discount, valid until, description), etc.
+- Context fields auto-reset when campaign type changes
+- `contextData` passed to queue POST API
+
+**Queue API (`/api/operator/queue`):**
+- POST now accepts `contextData` and saves it to `OutboundQueueItem.contextData` (JSONB)
+- `contextData` spread into `initiateOutboundCall()` so the AI agent receives campaign context
+
+### Files Modified
+- `src/lib/voice/session-manager.ts` — Outbound direction + update-not-create logic
+- `src/lib/voice/voice-server.ts` — ESM import, typed context, split inbound/outbound
+- `src/lib/voice/call-store.ts` — Added `updateCallRecordById()`
+- `src/lib/voice/outbound.ts` — Fixed StatusCallback URL
+- `src/lib/voice/types.ts` — Added direction/campaignType/recordId to AgentVoiceConfig
+- `src/app/api/voice/status/route.ts` — OutboundQueueItem status propagation
+- `src/app/api/operator/queue/route.ts` — contextData handling
+- `src/components/operator/outbound-queue-tab.tsx` — Campaign detail fields UI
+
+### Database Cleanup
+- Cancelled stuck IN_PROGRESS/QUEUED OutboundQueueItems from testing
+- Failed stuck ACTIVE outbound CallRecords from testing
+
+---
