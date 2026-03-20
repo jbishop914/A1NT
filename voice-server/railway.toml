@@ -3,10 +3,11 @@ builder = "DOCKERFILE"
 dockerfilePath = "voice-server/Dockerfile"
 
 # Railway needs the build context at the repo root so COPY can access src/ and package.json
-watchPatterns = ["src/lib/voice/**", "voice-server/**", "package.json"]
+watchPatterns = ["src/lib/voice/**", "src/lib/db.ts", "voice-server/**", "package.json", "prisma/**"]
 
 [deploy]
 healthcheckPath = "/health"
-healthcheckTimeout = 5
+healthcheckTimeout = 10
+startCommand = "npx tsx src/lib/voice/voice-server.ts"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
