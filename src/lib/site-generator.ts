@@ -26,6 +26,7 @@ interface SectionContent {
   promotions: { items: { title: string; description: string; badge: string }[] };
   gallery: { images: { alt: string; placeholder: string }[] };
   faq: { items: { question: string; answer: string }[] };
+  booking: { orgId: string; theme: string };
 }
 
 function getDefaultContent(clientName: string): SectionContent {
@@ -96,6 +97,10 @@ function getDefaultContent(clientName: string): SectionContent {
         { question: "What areas do you serve?", answer: "We serve the greater Hartford area and surrounding communities within a 30-mile radius." },
         { question: "Do you offer emergency services?", answer: "Yes, we offer 24/7 emergency service. Call our main number anytime for urgent situations." },
       ],
+    },
+    booking: {
+      orgId: "demo-org",
+      theme: "clean-light",
     },
   };
 }
@@ -722,6 +727,25 @@ function renderGallery(content: SectionContent["gallery"]): string {
     </section>`;
 }
 
+function renderBooking(content: SectionContent["booking"]): string {
+  return `
+    <section id="booking" style="background: var(--bg-alt);">
+      <div class="section-inner" style="text-align: center;">
+        <div class="section-label">Online Booking</div>
+        <h2 class="section-title">Schedule an Appointment</h2>
+        <p class="section-subtitle" style="margin: 0 auto 2.5rem;">Book your appointment online — fast, easy, and available 24/7.</p>
+        <div style="display: flex; justify-content: center;">
+          <div id="a1nt-booking"></div>
+          <script src="https://a1ntegrel.vercel.app/widget/booking-loader.js"
+            data-org-id="${escapeHtml(content.orgId)}"
+            data-theme="${escapeHtml(content.theme)}"
+            data-container="a1nt-booking">
+          </script>
+        </div>
+      </div>
+    </section>`;
+}
+
 function renderFaq(content: SectionContent["faq"]): string {
   const items = content.items
     .map(
@@ -756,12 +780,20 @@ const sectionRenderers: Record<SectionType, (content: SectionContent, accentColo
   promotions: (c) => renderPromotions(c.promotions),
   gallery: (c) => renderGallery(c.gallery),
   faq: (c) => renderFaq(c.faq),
+  booking: (c) => renderBooking(c.booking),
 };
 
 export function generateSiteHTML(site: ClientWebsite): string {
   const template = websiteTemplates.find((t) => t.id === site.templateId);
   const { primaryColor, accentColor, fontFamily } = site.theme;
   const content = getDefaultContent(site.clientName);
+
+  // If booking section exists, update hero CTA to point to booking
+  const hasBooking = site.sections.some((s) => s.type === "booking" && s.visible);
+  if (hasBooking) {
+    content.hero.ctaText = "Schedule a Free Estimate Now — We're Available!";
+    content.hero.ctaHref = "#booking";
+  }
 
   // Build nav links from visible sections
   const visibleSections = site.sections
@@ -779,6 +811,7 @@ export function generateSiteHTML(site: ClientWebsite): string {
     promotions: { label: "Specials", href: "#promotions" },
     gallery: { label: "Gallery", href: "#gallery" },
     faq: { label: "FAQ", href: "#faq" },
+    booking: { label: "Book Now", href: "#booking" },
   };
 
   const navLinks = visibleSections
@@ -826,7 +859,12 @@ export function generateSiteHTML(site: ClientWebsite): string {
     <div class="nav-inner">
       <a href="#home" class="nav-brand">${escapeHtml(site.clientName)}</a>
       <ul class="nav-links">${navLinks}</ul>
-      ${visibleSections.some((s) => s.type === "contact") ? '<a href="#contact" class="nav-cta">Contact Us</a>' : ""}
+      ${hasBooking
+          ? '<a href="#booking" class="nav-cta">Book Now</a>'
+          : visibleSections.some((s) => s.type === "contact")
+          ? '<a href="#contact" class="nav-cta">Contact Us</a>'
+          : ""
+      }
     </div>
   </nav>
 

@@ -784,7 +784,7 @@ export const sampleFormTemplates: FormTemplate[] = [
 export type SiteStatus = "Draft" | "Published" | "Maintenance";
 export type SiteTier = "Static" | "Portal" | "Premium";
 export type TemplateIndustry = "Plumbing" | "HVAC" | "Electrical" | "Landscaping" | "General Contractor" | "Auto Repair" | "Cleaning" | "Property Management";
-export type SectionType = "hero" | "services" | "team" | "reviews" | "contact" | "map" | "promotions" | "gallery" | "about" | "faq";
+export type SectionType = "hero" | "services" | "team" | "reviews" | "contact" | "map" | "promotions" | "gallery" | "about" | "faq" | "booking";
 
 export interface WebsiteTemplate {
   id: string;

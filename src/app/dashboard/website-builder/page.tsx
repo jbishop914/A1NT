@@ -42,6 +42,7 @@ import {
   X,
   Download,
   Loader2,
+  CalendarCheck,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -156,6 +157,7 @@ const sectionConfig: Record<SectionType, { label: string; icon: typeof Globe; mo
   promotions: { label: "Promotions", icon: Megaphone, moduleSource: "Sales & Marketing" },
   gallery: { label: "Gallery", icon: Image, moduleSource: "Work Orders" },
   faq: { label: "FAQ", icon: HelpCircle },
+  booking: { label: "Book Now", icon: CalendarCheck, moduleSource: "Online Booking" },
 };
 
 // --- Template preview card ---
