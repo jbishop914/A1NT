@@ -1512,3 +1512,193 @@ Twilio Status Webhook → Vercel /api/voice/status
 - Multi-path voice engine abstraction layer
 
 ---
+
+## Session 18 — Outbound Calls, Routes & Dispatch, Demo/Training Module
+**Date:** 2026-03-20
+**Commit:** `e2d3a2a` — feat: outbound voice calls, routes & dispatch, demo/training module
+**Build:** 31 routes (up from 29)
+**Files Changed:** 14 files, +5,243 lines
+
+### Overview
+Massive three-workstream parallel build. Josh requested outbound voice call support (campaign-based), a routes & dispatch system for fleet management, and a demo/training module — all in one session. Architecture specs were written first, then two subagents ran routes + demo builds while outbound voice was built directly. All three converged, shadcn v4 type issues were fixed, and the build passed clean.
+
+### Workstream 1: Outbound Voice Calls
+
+#### Campaign Prompt System (`src/lib/voice/campaign-prompts.ts`)
+Six campaign types, each with full prompt templates following the same 6-layer prompt architecture as the inbound receptionist:
+
+| Campaign Type | Purpose | Example Use |
+|---|---|---|
+| `appointment-confirm` | Confirm upcoming appointments | "Hi, this is Alex from TripleA Plumbing confirming your appointment tomorrow at 2 PM" |
+| `appointment-reschedule` | Reschedule existing appointments | Offers alternative time slots, handles objections |
+| `pre-service-info` | Gather info before a service visit | Access instructions, pet situations, parking details |
+| `post-service-followup` | Follow up after completed work | Satisfaction check, review request, issue detection |
+| `invoice-followup` | Late invoice reminders | Polite escalation, payment arrangement options |
+| `seasonal-promo` | Promotional/sales calls | Seasonal offers, upsell opportunities |
+
+Each prompt template includes:
+- Role identity and voice personality
+- Campaign-specific objectives and talking points
+- Handling instructions (objections, edge cases)
+- Call disposition categories for logging
+
+#### Outbound Call Engine (`src/lib/voice/outbound.ts`)
+- `initiateOutboundCall()` — Twilio REST API call initiation with campaign context passed via base64url-encoded Stream URL parameters
+- `createOutboundRecord()` / `updateOutboundRecord()` — DB record lifecycle management
+- `getOutboundQueue()` — Pending/scheduled call queue queries
+- `getOutboundStats()` — Campaign performance aggregation
+
+#### API Route (`src/app/api/voice/outbound/route.ts`)
+- **POST** — Trigger an outbound call (validates campaign type, customer data, initiates Twilio call)
+- **GET** — Retrieve outbound queue and campaign stats
+- Campaign context (type, customer info, talking points) encoded into the Twilio Stream URL so the voice server knows the call purpose when the WebSocket connects
+
+### Workstream 2: Demo/Training Module
+
+#### Landing Page (`src/app/dashboard/demo-training/page.tsx`)
+Three-mode entry point:
+
+| Mode | Description | Status |
+|---|---|---|
+| **Guided Story Tour** | 16-step narrated walkthrough following a work order lifecycle | MVP complete |
+| **Sandbox Mode** | Interactive playground with sample data, all features enabled | Scaffold only |
+| **Personal Preview** | Role-specific view of what the user's dashboard looks like | Scaffold only |
+
+#### Tour State Machine (`src/components/demo-tour/demo-tour-provider.tsx`)
+- React context provider managing tour state across the entire app
+- Step navigation (next/prev/skip/complete)
+- 10-second auto-advance timer with pause-on-hover
+- Progress tracking with completion percentage
+- Tour data persisted in component state (no localStorage per sandboxed environment)
+
+#### Tour Overlay (`src/components/demo-tour/demo-tour-overlay.tsx`)
+- **Spotlight effect** — Highlights the relevant UI element for each step
+- **Glassmorphism tooltip bubbles** — Frosted-glass info panels with step content
+- **Progress bar** — Visual indicator of tour completion
+- **Auto-advance countdown** — Visual ring timer showing time until next step
+- Responsive positioning (adjusts tooltip placement based on viewport)
+
+#### Tour Steps (`src/components/demo-tour/tour-steps.ts`)
+16-step story arc following a complete work order lifecycle for TripleA Plumbing:
+1. Welcome / Dashboard overview
+2. Incoming call arrives (AI Receptionist)
+3. Alex answers, identifies the customer
+4. Customer describes a clogged drain
+5. Alex checks the schedule
+6. Alex books the appointment
+7. Work order created automatically
+8. Technician receives assignment
+9. Pre-service info gathered (outbound call)
+10. Technician en route (fleet tracking)
+11. Technician arrives, documents with photos
+12. Work completed, customer signs off
+13. Invoice generated automatically
+14. Post-service follow-up call
+15. Customer leaves a review
+16. Business owner sees updated KPIs
+
+#### Sidebar Update (`src/components/app-sidebar.tsx`)
+- Added "Platform" section to sidebar navigation
+- "Demo & Training" entry with GraduationCap icon
+- Positioned below operational modules, above settings
+
+### Workstream 3: Routes & Dispatch
+
+#### Type System (`src/types/routes.ts`)
+Full TypeScript interfaces for the routing domain:
+- `VehicleRoute` — Route with stops, distance, duration, optimization status
+- `RouteStop` — Individual stop with coordinates, time windows, service duration
+- `RouteConfig` — Route optimization parameters (max stops, time windows, vehicle capacity)
+- `FleetVehicle` — Vehicle with current location, assigned technician, status
+- `RouteCalendarEntry` — Calendar integration for scheduling
+
+#### Sample Data (`src/data/sample-routes.ts`)
+Comprehensive demo dataset for TripleA Plumbing:
+- 4 fleet vehicles with technician assignments
+- 3 pre-built routes with realistic Connecticut-area coordinates
+- 12 work orders with addresses, time windows, and service types
+- Calendar entries linked to routes and work orders
+
+#### Map Component (`src/components/route-map.tsx`)
+- **Mapbox GL JS v3.20** integration with dark theme map style
+- Numbered stop markers with color-coded route assignment
+- Polyline route visualization connecting stops in order
+- Interactive popups showing stop details (customer, time window, service type)
+- Vehicle position markers with real-time tracking capability
+- Responsive container with zoom controls
+
+#### Route Builder Wizard (`src/components/route-builder-sheet.tsx`)
+6-step slide-out sheet for creating new routes:
+1. **Route Name & Vehicle** — Assign a name and select vehicle/technician
+2. **Add Stops** — Search and add work orders as route stops
+3. **Time Windows** — Set arrival time constraints for each stop
+4. **Optimize** — Traveling salesman optimization via Mapbox Optimization API
+5. **Review** — Final route summary with distance/duration estimates
+6. **Confirm** — Save and assign the route
+
+Fixed Base UI Select `onValueChange` type issue: `string | null` → `(v) => setState(v ?? defaultValue)`
+
+#### Routes Tab (`src/components/routes-tab.tsx`)
+Three-panel layout integrated into the Fleet & Equipment page:
+- **Left Panel** — Fleet vehicle list with status indicators, assigned routes, and quick actions
+- **Center Panel** — Full-width Mapbox map with all active routes visualized
+- **Right Panel** — Split between calendar view (top) and unassigned work orders (bottom)
+- Drag-and-drop ready architecture for assigning work orders to routes
+
+#### Fleet Page Update (`src/app/dashboard/fleet-equipment/page.tsx`)
+- Added "Routes" tab alongside existing fleet management tabs
+- Tab state management with URL-friendly tab switching
+
+### Technical Notes
+
+#### shadcn v4 / Base UI Compatibility
+Base UI's Select component passes `string | null` to `onValueChange` (unlike Radix which passes `string`). This caused TypeScript errors in the route builder. Fix pattern:
+```tsx
+onValueChange={(v) => setState(v ?? defaultValue)}
+```
+
+#### Outbound Call Context Passing
+Campaign context (type, customer data, talking points) is base64url-encoded and appended to the Twilio Stream URL as query parameters. When the voice server receives the WebSocket connection, it decodes the context to configure the AI agent's behavior for that specific call type. This avoids needing a separate lookup — all context travels with the call.
+
+#### Mapbox Optimization API
+Route optimization uses Mapbox's Optimization API (traveling salesman solver) to find the most efficient stop order. Supports:
+- Time window constraints per stop
+- Vehicle capacity limits
+- Round-trip vs one-way routes
+- Real-time traffic consideration
+
+### Files Changed
+| File | Lines | Description |
+|---|---|---|
+| `src/lib/voice/campaign-prompts.ts` | +417 | 6 campaign types with full prompt templates |
+| `src/lib/voice/outbound.ts` | +246 | Twilio REST call initiation, DB management |
+| `src/app/api/voice/outbound/route.ts` | +172 | POST trigger + GET queue/stats API |
+| `src/types/routes.ts` | +154 | TypeScript interfaces for routes domain |
+| `src/data/sample-routes.ts` | +581 | Demo data (vehicles, routes, work orders) |
+| `src/components/route-map.tsx` | +388 | Mapbox GL map with stops and polylines |
+| `src/components/route-builder-sheet.tsx` | +1,050 | 6-step route creation wizard |
+| `src/components/routes-tab.tsx` | +873 | Three-panel routes layout |
+| `src/app/dashboard/fleet-equipment/page.tsx` | +19/-2 | Added Routes tab |
+| `src/app/dashboard/demo-training/page.tsx` | +424 | Three-mode demo landing page |
+| `src/components/demo-tour/demo-tour-provider.tsx` | +192 | Tour state machine |
+| `src/components/demo-tour/demo-tour-overlay.tsx` | +490 | Spotlight + glassmorphism overlay |
+| `src/components/demo-tour/tour-steps.ts` | +220 | 16-step story arc |
+| `src/components/app-sidebar.tsx` | +19 | Platform section + Demo & Training entry |
+
+### Architecture Decisions
+1. **Campaign prompts follow the 6-layer architecture** — Same pattern as inbound receptionist (identity, personality, knowledge, rules, tools, disposition). Ensures consistency and makes adding new campaign types trivial.
+2. **Context-in-URL pattern for outbound calls** — Encoding campaign context into the Twilio Stream URL eliminates the need for a pre-call lookup or shared state. The voice server is stateless per-call.
+3. **Mapbox for routes** — Chose Mapbox GL JS over Google Maps for better styling control, built-in optimization API, and dark theme support matching the A1 design language.
+4. **Demo tour as a state machine** — The provider/overlay pattern allows the tour to work across any page without modifying existing components. Steps reference CSS selectors, so the tour adapts as the UI evolves.
+5. **Three-panel routes layout** — Mirrors professional dispatch software (fleet list / map / schedule). The unassigned work orders panel enables future drag-and-drop assignment.
+
+### Next Up
+- Wire outbound calls to the voice server (campaign-aware agent behavior)
+- Add outbound call UI tab in the receptionist or a dedicated campaigns page
+- Implement sandbox mode in the demo module (load sample data, enable all features)
+- Add drag-and-drop work order assignment to routes
+- Mapbox Optimization API integration (currently structured, needs API key)
+- Route tracking with real-time vehicle positions via GPS/telematics
+- Mobile-optimized technician view for routes
+
+---
