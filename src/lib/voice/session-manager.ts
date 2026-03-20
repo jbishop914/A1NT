@@ -167,14 +167,9 @@ export function handleMediaStream(
               silence_duration_ms: 500,
             },
             instructions: systemPrompt,
-            tools: tools.map((t) => ({
-              type: "function" as const,
-              function: {
-                name: t.name,
-                description: t.description,
-                parameters: t.parameters,
-              },
-            })),
+            // Realtime API uses FLAT tool format (name at top level),
+            // NOT the Chat Completions format (name inside function wrapper)
+            tools,
             temperature,
           },
         };
