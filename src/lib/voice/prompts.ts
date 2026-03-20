@@ -17,6 +17,8 @@ interface CompanyInfo {
   description: string;
   hours?: string;
   serviceArea?: string;
+  serviceAreaType?: "RADIUS" | "POLYGON" | null;
+  serviceAreaRadius?: number | null; // miles
   website?: string;
   phoneNumber?: string;
 }
@@ -42,6 +44,9 @@ interface LiveContext {
   previousInteractions?: string;
   currentTime: string;
   todaySchedule?: string;
+  /** If the caller tried to book online but was flagged out-of-area */
+  bookingFlagAddress?: string;
+  bookingFlagOutOfArea?: boolean;
 }
 
 /* ─── Layer 1: Platform ────────────────────────────────────────────────── */
@@ -110,9 +115,28 @@ function buildCompanyLayer(company: CompanyInfo): string {
     `- Services: ${company.description}`,
   ];
   if (company.hours) lines.push(`- Business hours: ${company.hours}`);
-  if (company.serviceArea) lines.push(`- Service area: ${company.serviceArea}`);
+  if (company.serviceArea) {
+    lines.push(`- Service area: ${company.serviceArea}`);
+    if (company.serviceAreaType === "RADIUS" && company.serviceAreaRadius) {
+      lines.push(`- Service area boundary: ${company.serviceAreaRadius}-mile radius from base location`);
+    } else if (company.serviceAreaType === "POLYGON") {
+      lines.push(`- Service area boundary: Custom polygon boundary (defined in system settings)`);
+    }
+  }
   if (company.website) lines.push(`- Website: ${company.website}`);
   if (company.phoneNumber) lines.push(`- Phone: ${company.phoneNumber}`);
+
+  // Service area handling instructions
+  lines.push(``);
+  lines.push(`### Service Area Policy`);
+  lines.push(`- When a caller asks about whether their area is served, check their address against the service area.`);
+  lines.push(`- If the caller was flagged by the online booking system as out-of-service-area:`);
+  lines.push(`  1. Confirm the address with the caller`);
+  lines.push(`  2. If the address matches the flagged address, politely explain: "I'm sorry, but that location is outside our current service area. We appreciate your interest and apologize for the inconvenience."`);
+  lines.push(`  3. If the address is different from what was entered online, note the new address and offer to check if it's within the service area.`);
+  lines.push(`- If unsure whether an address is within the service area, offer to have the office review and follow up.`);
+  lines.push(`- Track out-of-area inquiries — if many callers from the same area are requesting service, note it for potential service area expansion.`);
+
   return lines.join("\n");
 }
 
@@ -160,6 +184,12 @@ function buildLiveContextLayer(ctx: LiveContext): string {
   }
   if (ctx.todaySchedule) {
     lines.push(`- Today's schedule summary: ${ctx.todaySchedule}`);
+  }
+  if (ctx.bookingFlagOutOfArea && ctx.bookingFlagAddress) {
+    lines.push(``);
+    lines.push(`⚠️ BOOKING FLAG: This caller recently attempted to book online but was flagged as OUTSIDE the service area.`);
+    lines.push(`   Flagged address: ${ctx.bookingFlagAddress}`);
+    lines.push(`   Action: Confirm the address, explain the service area limitation politely, and log the interaction.`);
   }
   return lines.join("\n");
 }
