@@ -123,6 +123,7 @@ model Organization {
   bookings           Booking[]
   bookingTypes       BookingType[]
   bookingFlags       BookingFlag[]
+  stripeAccount      StripeAccount?
 
   @@index([industry])
 }
@@ -481,6 +482,60 @@ model Task {
 }
 
 // ============================================================================
+// STRIPE CONNECT (Platform Payments)
+// ============================================================================
+
+enum StripeAccountStatus {
+  ONBOARDING       // Account created, onboarding not complete
+  PENDING_REVIEW   // Onboarding submitted, Stripe reviewing
+  ACTIVE           // Fully verified, can accept payments
+  RESTRICTED       // Limited functionality (missing info or issues)
+  DISABLED         // Manually disabled by platform or Stripe
+}
+
+model StripeAccount {
+  id                String              @id @default(cuid())
+  organizationId    String              @unique
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Stripe identifiers
+  stripeAccountId   String              @unique // acct_xxx — Stripe Connect account ID
+  stripeOnboardingComplete Boolean       @default(false)
+
+  // Account status
+  status            StripeAccountStatus @default(ONBOARDING)
+  chargesEnabled    Boolean             @default(false)
+  payoutsEnabled    Boolean             @default(false)
+  detailsSubmitted  Boolean             @default(false)
+
+  // Business info (cached from Stripe)
+  businessName      String?
+  businessType      String?             // "individual", "company", "non_profit"
+  country           String              @default("US")
+  defaultCurrency   String              @default("usd")
+
+  // Platform fee config
+  applicationFeePercent Float           @default(0.5)  // 0.5% platform fee
+  applicationFeeFixed   Int             @default(25)   // $0.25 in cents
+
+  // Payout schedule
+  payoutScheduleInterval String         @default("daily") // daily, weekly, monthly
+  payoutScheduleAnchor   Int?           // Day of week (1=Mon) or month (1-31)
+
+  // Timestamps
+  onboardingStartedAt DateTime?
+  onboardingCompletedAt DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  // Relations
+  paymentTransactions PaymentTransaction[]
+  payouts             Payout[]
+
+  @@index([stripeAccountId])
+}
+
+// ============================================================================
 // INVOICING & PAYMENTS
 // ============================================================================
 
@@ -488,6 +543,7 @@ enum InvoiceStatus {
   DRAFT
   SENT
   VIEWED
+  PARTIALLY_PAID
   PAID
   OVERDUE
   CANCELLED
@@ -514,6 +570,12 @@ model Invoice {
   amountPaid     Float         @default(0)
   notes          String?
   paidAt         DateTime?
+
+  // Stripe payment integration
+  stripePaymentIntentId String?         // pi_xxx — for "Pay Now" link
+  stripePaymentLink     String?         // URL for customer to pay online
+  paymentLinkExpiresAt  DateTime?       // When the pay link expires
+
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -521,6 +583,7 @@ model Invoice {
   lineItems      InvoiceLineItem[]
   payments       Payment[]
   workOrders     WorkOrder[]
+  transactions   PaymentTransaction[]
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
@@ -543,12 +606,128 @@ model Payment {
   invoiceId   String
   invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   amount      Float
-  method      String   // "credit_card", "bank_transfer", "check", "cash"
+  method      String   // "credit_card", "bank_transfer", "check", "cash", "stripe"
   reference   String?  // Stripe payment intent ID, check number, etc.
   paidAt      DateTime @default(now())
   createdAt   DateTime @default(now())
 
   @@index([invoiceId])
+}
+
+// ============================================================================
+// PAYMENT TRANSACTIONS (Stripe Ledger)
+// ============================================================================
+
+enum TransactionStatus {
+  PENDING           // Payment intent created
+  PROCESSING        // Payment being processed
+  SUCCEEDED         // Payment captured successfully
+  FAILED            // Payment attempt failed
+  CANCELLED         // Payment intent cancelled
+  REFUNDED          // Full refund processed
+  PARTIALLY_REFUNDED // Partial refund
+  DISPUTED          // Chargeback/dispute opened
+}
+
+enum TransactionType {
+  INVOICE_PAYMENT   // Payment against an invoice
+  BOOKING_PAYMENT   // Upfront service call payment
+  DEPOSIT           // Deposit/partial payment
+  REFUND            // Refund transaction
+}
+
+model PaymentTransaction {
+  id                  String            @id @default(cuid())
+  organizationId      String
+
+  // Stripe identifiers
+  stripeAccountId     String            // Connected account that received the payment
+  stripeAccount       StripeAccount     @relation(fields: [stripeAccountId], references: [stripeAccountId])
+  stripePaymentIntentId String?         @unique // pi_xxx
+  stripeChargeId      String?           // ch_xxx
+  stripeRefundId      String?           // re_xxx (for refund transactions)
+
+  // Transaction details
+  type                TransactionType
+  status              TransactionStatus @default(PENDING)
+  currency            String            @default("usd")
+  amount              Int               // Total in cents (e.g., 50000 = $500.00)
+  stripeFee           Int               @default(0) // Stripe processing fee in cents
+  applicationFee      Int               @default(0) // A1NT platform fee in cents
+  netAmount           Int               @default(0) // Amount to connected account in cents
+
+  // Customer info
+  customerName        String?
+  customerEmail       String?
+  paymentMethod       String?           // "card", "us_bank_account", "link"
+  cardBrand           String?           // "visa", "mastercard", "amex"
+  cardLast4           String?           // "4242"
+
+  // Linked records
+  invoiceId           String?
+  invoice             Invoice?          @relation(fields: [invoiceId], references: [id])
+  bookingId           String?
+  booking             Booking?          @relation(fields: [bookingId], references: [id])
+
+  // Metadata
+  description         String?
+  failureReason       String?           // Why payment failed
+  refundReason        String?           // Why refund was issued
+  metadata            Json?             // Additional Stripe metadata
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([organizationId])
+  @@index([stripeAccountId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// PAYOUTS (Stripe → Connected Account Bank)
+// ============================================================================
+
+enum PayoutStatus {
+  PENDING
+  IN_TRANSIT
+  PAID
+  FAILED
+  CANCELLED
+}
+
+model Payout {
+  id                  String        @id @default(cuid())
+  organizationId      String
+
+  // Stripe identifiers
+  stripeAccountId     String
+  stripeAccount       StripeAccount @relation(fields: [stripeAccountId], references: [stripeAccountId])
+  stripePayoutId      String        @unique // po_xxx
+
+  // Payout details
+  status              PayoutStatus  @default(PENDING)
+  amount              Int           // In cents
+  currency            String        @default("usd")
+  arrivalDate         DateTime      // Expected arrival
+  method              String        @default("standard") // "standard" or "instant"
+
+  // Bank info (masked)
+  bankName            String?
+  bankLast4           String?       // Last 4 of bank account
+
+  // Metadata
+  description         String?
+  failureReason       String?
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([organizationId])
+  @@index([stripeAccountId])
+  @@index([status])
+  @@index([arrivalDate])
 }
 
 // ============================================================================
@@ -958,6 +1137,7 @@ model Booking {
   updatedAt         DateTime        @updatedAt
 
   flags             BookingFlag[]
+  transactions      PaymentTransaction[]
 
   @@index([organizationId])
   @@index([requestedDate])

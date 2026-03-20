@@ -30,6 +30,7 @@ import {
   GraduationCap,
   Layers,
   Headset,
+  CreditCard,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -131,6 +132,15 @@ const navSections: NavSection[] = [
         quickLinks: [
           { label: "Outstanding", href: "/dashboard/invoicing" },
           { label: "New Invoice", href: "/dashboard/invoicing#new" },
+        ],
+      },
+      {
+        label: "Payments",
+        href: "/dashboard/payments",
+        icon: CreditCard,
+        quickLinks: [
+          { label: "Transactions", href: "/dashboard/payments" },
+          { label: "Payouts", href: "/dashboard/payments#payouts" },
         ],
       },
     ],

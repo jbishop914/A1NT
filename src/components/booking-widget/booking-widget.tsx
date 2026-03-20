@@ -15,6 +15,8 @@ import {
   Loader2,
   AlertCircle,
   X,
+  CreditCard,
+  Shield,
 } from "lucide-react";
 import { getTheme, themeToCSSVars, type BookingTheme } from "./themes";
 
@@ -98,6 +100,10 @@ export function BookingWidget({
   const [zip, setZip] = useState("");
   const [description, setDescription] = useState("");
   const [addressValid, setAddressValid] = useState<boolean | null>(null);
+
+  // Payment state — service calls require upfront payment
+  const [paymentEnabled, setPaymentEnabled] = useState(false);
+  const [serviceFee, setServiceFee] = useState<number | null>(null); // In cents
   const [addressChecking, setAddressChecking] = useState(false);
 
   /* ── Load booking types on mount ── */
@@ -192,6 +198,26 @@ export function BookingWidget({
   }, [street, city, state, zip, apiBase, orgId]);
 
   /* ── Submit booking ── */
+  // Check if payment is enabled for this org when a service call type is selected
+  useEffect(() => {
+    if (selectedType?.type === "SERVICE_CALL") {
+      // Check if org has payment processing enabled
+      fetch(`${apiBase}/api/stripe/connect`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.connected && data.chargesEnabled) {
+            setPaymentEnabled(true);
+            // Default service call fee — could be configurable per booking type
+            setServiceFee(7500); // $75.00 default service call fee
+          }
+        })
+        .catch(() => setPaymentEnabled(false));
+    } else {
+      setPaymentEnabled(false);
+      setServiceFee(null);
+    }
+  }, [selectedType, apiBase]);
+
   const submitBooking = useCallback(async () => {
     if (!selectedType || !selectedSlot) return;
 
@@ -214,6 +240,8 @@ export function BookingWidget({
           address: { street, city, state, zip },
           description,
           orgId,
+          requiresPayment: paymentEnabled && selectedType.type === "SERVICE_CALL",
+          serviceFee: serviceFee,
         }),
       });
 
@@ -223,6 +251,13 @@ export function BookingWidget({
       }
 
       const booking = await res.json();
+
+      // If booking requires payment, redirect to Stripe Checkout
+      if (booking.checkoutUrl) {
+        window.location.href = booking.checkoutUrl;
+        return;
+      }
+
       setStep("success");
       onComplete?.(booking);
     } catch (err: any) {
@@ -246,6 +281,8 @@ export function BookingWidget({
     orgId,
     apiBase,
     onComplete,
+    paymentEnabled,
+    serviceFee,
   ]);
 
   /* ── Navigation ── */
@@ -836,7 +873,45 @@ export function BookingWidget({
                   value={description}
                 />
               )}
+
+              {/* Service call payment notice */}
+              {paymentEnabled && serviceFee && selectedType?.type === "SERVICE_CALL" && (
+                <>
+                  <div style={{ borderTop: `1px solid var(--bw-border)`, margin: "4px 0" }} />
+                  <SummaryRow
+                    icon={<CreditCard style={{ width: "14px", height: "14px" }} />}
+                    label="Service Fee"
+                    value={`$${(serviceFee / 100).toFixed(2)}`}
+                  />
+                </>
+              )}
             </div>
+
+            {/* Payment required banner */}
+            {paymentEnabled && serviceFee && selectedType?.type === "SERVICE_CALL" && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  background: `var(--bw-accent)08`,
+                  border: `1px solid var(--bw-accent)25`,
+                  marginTop: "12px",
+                }}
+              >
+                <Shield style={{ width: "16px", height: "16px", color: "var(--bw-accent)", flexShrink: 0, marginTop: "1px" }} />
+                <div>
+                  <p style={{ fontSize: "12px", fontWeight: 600, marginBottom: "2px" }}>
+                    Payment of ${(serviceFee / 100).toFixed(2)} required
+                  </p>
+                  <p style={{ fontSize: "11px", color: "var(--bw-text-muted)" }}>
+                    Service calls require upfront payment. You&apos;ll be redirected to our secure payment page powered by Stripe after confirming.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -938,7 +1013,7 @@ export function BookingWidget({
               ) : (
                 <Check style={{ width: "14px", height: "14px" }} />
               )}
-              Confirm Booking
+              {paymentEnabled && selectedType?.type === "SERVICE_CALL" ? "Confirm & Pay" : "Confirm Booking"}
             </button>
           ) : (
             <button

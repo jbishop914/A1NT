@@ -14,6 +14,10 @@ import {
   Download,
   Pencil,
   ExternalLink,
+  CreditCard,
+  Loader2,
+  Link2,
+  Copy,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -513,6 +517,14 @@ function InvoiceDetail({ invoice, onClose }: { invoice: SampleInvoice; onClose: 
 
         <Separator />
 
+        {/* Pay Now Link */}
+        {balance > 0 && invoice.status !== "Cancelled" && (
+          <>
+            <Separator />
+            <PayNowSection invoice={invoice} balance={balance} />
+          </>
+        )}
+
         {/* Actions */}
         <div className="flex flex-wrap gap-2" data-testid="invoice-actions">
           <Button size="sm" data-testid="button-send-invoice">
@@ -534,5 +546,98 @@ function InvoiceDetail({ invoice, onClose }: { invoice: SampleInvoice; onClose: 
         </div>
       </div>
     </>
+  );
+}
+
+// --- Pay Now Link Section ---
+
+function PayNowSection({ invoice, balance }: { invoice: SampleInvoice; balance: number }) {
+  const [generating, setGenerating] = useState(false);
+  const [payLink, setPayLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleGenerateLink = async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId: invoice.id }),
+      });
+      const data = await res.json();
+      if (data.checkoutUrl) {
+        setPayLink(data.checkoutUrl);
+      } else {
+        setError(data.error || "Could not generate payment link.");
+      }
+    } catch {
+      setError("Failed to connect to payment service.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleCopy = () => {
+    if (payLink) {
+      navigator.clipboard.writeText(payLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className="space-y-3" data-testid="pay-now-section">
+      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Online Payment
+      </h4>
+
+      {!payLink ? (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Generate a secure payment link for {formatCurrency(balance)}. Your customer can pay
+            by credit card, debit card, or bank transfer.
+          </p>
+          <Button
+            size="sm"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={handleGenerateLink}
+            disabled={generating}
+            data-testid="button-generate-pay-link"
+          >
+            {generating ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            Generate Pay Now Link
+          </Button>
+          {error && (
+            <p className="text-xs text-red-500">{error}</p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 border border-border">
+            <Link2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            <span className="text-xs font-mono truncate flex-1">{payLink}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 shrink-0"
+              onClick={handleCopy}
+              data-testid="button-copy-pay-link"
+            >
+              <Copy className="h-3 w-3" />
+              <span className="text-[10px] ml-1">{copied ? "Copied" : "Copy"}</span>
+            </Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Share this link with your customer via email, SMS, or include it on the invoice.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }

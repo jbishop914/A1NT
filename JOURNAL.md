@@ -2148,3 +2148,120 @@ Continue Phase A (P0) from Feature Gap Analysis:
 - P0 Item #4: Scheduling CRUD (date nav, drag-and-drop, dispatch)
 
 ---
+
+## Session 22 — March 20, 2026 (Afternoon)
+**Focus:** Payment Processing — P0 Item #2 from Feature Gap Analysis (Stripe Connect)
+
+### Summary
+Built the complete Stripe Connect payment processing integration for A1NT. This enables client businesses to accept online payments through the platform, with A1NT collecting application fees on each transaction. Architecture: A1NT as a Stripe Connect Platform, each client org as an Express connected account.
+
+### Business Decisions Made
+- **Account type:** Stripe Connect Express — Stripe handles KYC/compliance, A1NT controls charges and payouts
+- **Fee model:** Baked-in single rate (client sees one rate, no separate line items)
+  - Stripe base: 2.9% + 30¢
+  - A1NT application fee: 0.5% + 25¢
+  - Client total: ~3.4% + 55¢ per transaction
+- **Booking deposits:** No deposits for estimates — handled by estimator/agent. Service calls paid upfront at booking ($75 default)
+- **Payout schedule:** Default daily, configurable per org
+
+### What Was Built
+
+#### 1. Database Schema (Step 1)
+- **New models:** `StripeAccount`, `PaymentTransaction`, `Payout`
+- **New enums:** `StripeAccountStatus`, `TransactionStatus`, `TransactionType`, `PayoutStatus`
+- **Updated models:** `Invoice` (added stripePaymentIntentId, stripePaymentLink, paymentLinkExpiresAt), `Booking` (added transactions relation)
+- **Updated enums:** `InvoiceStatus` (added PARTIALLY_PAID)
+- All pushed to Railway PostgreSQL via `prisma db push`
+
+#### 2. Stripe Connect API Routes (Steps 2-3)
+- **`/api/stripe/connect`** — GET (account status), POST (create Express account + onboarding), PUT (refresh link / dashboard link)
+- **`/api/stripe/payments`** — POST (create payment intent with application fees), GET (list transactions + aggregate stats)
+- **`/api/stripe/checkout`** — POST (create Checkout Session for invoice "Pay Now" links)
+- **`/api/stripe/webhooks`** — POST (handles payment_intent.succeeded/failed, charge.refunded, account.updated, payout.paid/failed, checkout.session.completed)
+
+#### 3. Stripe Utility Library
+- **`src/lib/stripe.ts`** — Core helpers:
+  - `calculateApplicationFee()` — 0.5% + 25¢ (configurable per org)
+  - `createConnectedAccount()` — Express account creation with business profile
+  - `createOnboardingLink()` / `createDashboardLink()` — Link generation
+  - `createPaymentIntent()` — Destination charges with application fees
+  - `createCheckoutSession()` — Stripe-hosted checkout for invoice payments
+  - `createRefund()` — Full/partial refunds with application fee refund
+  - `constructWebhookEvent()` / `mapStripeAccountStatus()` — Webhook helpers
+
+#### 4. Settings → Payments Panel (Step 4)
+- **`PaymentSettings`** component with 3 states:
+  1. **Not connected:** Feature overview, fee disclosure, "Set Up Payments" CTA
+  2. **Onboarding incomplete:** Progress checklist, resume button
+  3. **Active:** Status dashboard with rate, payout schedule, capabilities, Stripe dashboard link
+- Automatically syncs account status with Stripe on load
+- Detects return from Stripe onboarding flow via URL params
+
+#### 5. Invoice "Pay Now" Flow (Step 5)
+- Added `PayNowSection` to invoice detail slide-out
+- Generates Stripe Checkout Session with one click
+- Shows copyable payment link for email/SMS sharing
+- Only appears when balance > 0 and invoice not cancelled
+- Checkout auto-calculates application fee based on org config
+
+#### 6. Booking Widget Payment (Step 6)
+- Service calls now check if org has Stripe connected
+- Confirm step shows payment amount + security notice for service calls
+- Submit button changes to "Confirm & Pay" when payment required
+- Redirects to Stripe Checkout after booking creation
+- Non-service-call types (estimates, follow-ups, etc.) proceed without payment as before
+
+#### 7. Payments Dashboard (Step 7)
+- New page: `/dashboard/payments`
+- Added to sidebar navigation (Operations → Payments)
+- KPI cards: Total Volume, Net Revenue, Platform Fees, Processing Fees
+- Transaction table: Status, customer, type, payment method, amount, fees, net, date
+- Filters: Search, status, type
+- Payouts tab (placeholder for live payout tracking)
+- Sample historical data for demo — no active/fake data
+
+### Architecture Decisions
+- **Express over Custom:** Lower dev overhead, Stripe handles KYC/compliance. Can upgrade to Custom later if white-labeling needed.
+- **Destination charges:** Money flows through A1NT platform account, application fee auto-collected, balance sent to connected account.
+- **Checkout Sessions for invoices:** Stripe-hosted checkout page — PCI compliant without handling card data.
+- **Payment Intents for widget:** Future-ready for embedded Stripe Elements if we want in-widget card forms.
+- **Webhook-driven state:** All transaction status updates come via webhooks, ensuring consistency even if user closes browser.
+
+### Files Added/Modified
+**New files:**
+- `src/lib/stripe.ts` — Stripe Connect utility library (294 lines)
+- `src/app/api/stripe/connect/route.ts` — Account management API (210 lines)
+- `src/app/api/stripe/payments/route.ts` — Payment processing API (182 lines)
+- `src/app/api/stripe/checkout/route.ts` — Checkout sessions API (109 lines)
+- `src/app/api/stripe/webhooks/route.ts` — Webhook handler (303 lines)
+- `src/components/payment-settings.tsx` — Settings panel component (430 lines)
+- `src/app/dashboard/payments/page.tsx` — Payments dashboard page (554 lines)
+
+**Modified files:**
+- `prisma/schema.prisma` — Added StripeAccount, PaymentTransaction, Payout models + enums
+- `src/app/dashboard/settings/page.tsx` — Added Payments expandable panel
+- `src/app/dashboard/invoicing/page.tsx` — Added PayNowSection component
+- `src/components/booking-widget/booking-widget.tsx` — Service call payment flow
+- `src/components/app-sidebar.tsx` — Added Payments nav item
+- `src/components/breadcrumb-nav.tsx` — Added "payments" label
+
+### Stripe Environment Variables Required
+```
+STRIPE_SECRET_KEY=sk_live_xxx          # A1NT platform secret key
+STRIPE_WEBHOOK_SECRET=whsec_xxx        # Webhook endpoint secret
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_xxx  # For frontend Stripe.js
+NEXT_PUBLIC_APP_URL=https://a1ntegrel.vercel.app  # Return URLs
+```
+
+### Feature Gap Roadmap Progress
+- **P0 Item #1: Online Booking ✅ COMPLETE** (Session 21)
+- **P0 Item #2: Payment Processing ✅ COMPLETE** (Session 22)
+- Remaining P0 items: QuickBooks, Scheduling, Work Orders, CRM CRUD, Mobile Field View, Estimates
+
+### Up Next
+Continue Phase A (P0) from Feature Gap Analysis:
+- P0 Item #3: QuickBooks Online API sync (bidirectional invoice/payment/expense sync)
+- P0 Item #4: Scheduling CRUD (date nav, drag-and-drop, dispatch)
+- P0 Item #5: Work Order lifecycle (CRUD, status transitions, pipeline connections)
+
+---

@@ -1,11 +1,12 @@
 "use client";
 
-import { Settings, Building2, Users, Shield, Bell, Palette, Map, MapPin } from "lucide-react";
+import { Settings, Building2, Users, Shield, Bell, Palette, Map, MapPin, CreditCard } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useState } from "react";
 import { CommandCenterSettingsPanel } from "@/components/command-center-settings";
 import { ServiceAreaSettings } from "@/components/service-area-settings";
+import { PaymentSettings } from "@/components/payment-settings";
 
 const settingsSections = [
   {
@@ -20,6 +21,13 @@ const settingsSections = [
     icon: MapPin,
     title: "Service Area",
     description: "Define your service boundary, radius, and business hours",
+    expandable: true,
+  },
+  {
+    id: "payments",
+    icon: CreditCard,
+    title: "Payments",
+    description: "Accept online payments, manage Stripe Connect, transaction fees",
     expandable: true,
   },
   {
@@ -100,6 +108,12 @@ export default function SettingsPage() {
               {section.id === "service-area" && expandedSection === "service-area" && (
                 <div className="border-t border-border bg-muted/10">
                   <ServiceAreaSettings />
+                </div>
+              )}
+              {/* Expandable Payments panel */}
+              {section.id === "payments" && expandedSection === "payments" && (
+                <div className="border-t border-border bg-muted/10">
+                  <PaymentSettings />
                 </div>
               )}
               {i < settingsSections.length - 1 && <Separator />}
