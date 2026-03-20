@@ -21,7 +21,9 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  Route,
 } from "lucide-react";
+import { RoutesTab } from "@/components/routes-tab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -189,7 +191,7 @@ function ConditionBadge({ condition }: { condition: Equipment["condition"] }) {
 }
 
 // --- Tab types ---
-type TabValue = "vehicles" | "maintenance" | "equipment";
+type TabValue = "vehicles" | "maintenance" | "equipment" | "routes";
 
 const allVehicleStatuses: VehicleStatus[] = ["Active", "In Shop", "Out of Service"];
 const allMaintenanceStatuses: MaintenanceStatus[] = ["Scheduled", "In Progress", "Completed", "Overdue"];
@@ -363,10 +365,15 @@ export default function FleetEquipmentPage() {
             <Package className="h-3.5 w-3.5 mr-1.5" />
             Equipment
           </TabsTrigger>
+          <TabsTrigger value="routes" data-testid="tab-routes">
+            <Route className="h-3.5 w-3.5 mr-1.5" />
+            Routes
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {/* Toolbar */}
+      {/* Toolbar — hidden on Routes tab (it has its own toolbar) */}
+      {activeTab !== "routes" && (
       <div className="flex items-center gap-3 flex-wrap" data-testid="toolbar">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -400,6 +407,14 @@ export default function FleetEquipmentPage() {
         </Select>
         <div className="flex-1" />
       </div>
+      )}
+
+      {/* Routes Tab — full-height, flex layout */}
+      {activeTab === "routes" && (
+        <div style={{ height: "calc(100vh - 280px)", minHeight: 600 }}>
+          <RoutesTab />
+        </div>
+      )}
 
       {/* Tab Content */}
       {activeTab === "vehicles" && (

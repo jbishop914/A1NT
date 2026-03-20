@@ -27,6 +27,8 @@ import {
   Shield,
   Bot,
   ChevronsRight,
+  GraduationCap,
+  Layers,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -199,6 +201,23 @@ const navSections: NavSection[] = [
         label: "Website Builder",
         href: "/dashboard/website-builder",
         icon: Globe,
+      },
+    ],
+  },
+  {
+    id: "platform",
+    label: "Platform",
+    icon: Layers,
+    items: [
+      {
+        label: "Demo & Training",
+        href: "/dashboard/demo-training",
+        icon: GraduationCap,
+        quickLinks: [
+          { label: "Guided Tour", href: "/dashboard/demo-training" },
+          { label: "Industry Sandbox", href: "/dashboard/demo-training#sandbox" },
+          { label: "Personal Preview", href: "/dashboard/demo-training#preview" },
+        ],
       },
     ],
   },
