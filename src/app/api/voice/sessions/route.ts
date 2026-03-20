@@ -1,38 +1,59 @@
 /* ─── Active Voice Sessions API ────────────────────────────────────────────
-   Returns the list of currently active voice sessions for the dashboard.
-   Used by the AI Agents page to show real-time call status.
+   GET /api/voice/sessions
+   
+   Returns currently active voice sessions.
+   
+   Note: In Vercel serverless, we can't share in-memory state with the
+   Railway voice server. Active sessions are tracked by querying for
+   CallRecords with status=ACTIVE. The voice server updates status
+   to COMPLETED when the call ends.
+   
+   Phase 2: Add Redis pub/sub for real-time session state sync.
    ──────────────────────────────────────────────────────────────────────── */
 
 import { NextResponse } from "next/server";
-
-// Note: In the serverless Vercel environment, this import won't share state
-// with the voice server process. In production, sessions would be stored in
-// Redis or the database. For the standalone voice server, this works correctly.
-// For now, we return a demo response for the dashboard.
+import { db } from "@/lib/db";
 
 export async function GET() {
-  // Phase 1: Return demo data for dashboard development
-  // Phase 2: Query Redis/DB for active sessions from the voice server
-  const demoSessions = [
-    {
-      id: "vs-demo-1",
-      agentId: "agent-alex",
-      agentName: "Alex",
-      callSid: "CA-demo-001",
-      status: "active" as const,
-      startedAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(), // 3 min ago
-      callerNumber: "+12035550147",
-      callerName: "Mrs. Johnson",
-      model: "gpt-realtime-mini",
-      duration: 180,
-      toolCalls: 2,
-      tokensUsed: 1247,
-    },
-  ];
+  try {
+    const orgId = process.env.A1NT_ORG_ID;
 
-  return NextResponse.json({
-    sessions: demoSessions,
-    totalActive: demoSessions.length,
-    serverStatus: "running",
-  });
+    const where: Record<string, unknown> = {
+      status: "ACTIVE",
+    };
+    if (orgId) where.organizationId = orgId;
+
+    const activeRecords = await db.callRecord.findMany({
+      where,
+      orderBy: { startedAt: "desc" },
+    });
+
+    const sessions = activeRecords.map((r) => ({
+      id: r.id,
+      agentId: r.agentId,
+      agentName: r.agentName,
+      callSid: r.callSid,
+      status: "active" as const,
+      startedAt: r.startedAt.toISOString(),
+      callerNumber: r.callerNumber,
+      callerName: r.callerName ?? "Unknown",
+      model: r.model,
+      duration: Math.round((Date.now() - r.startedAt.getTime()) / 1000),
+      toolCalls: Array.isArray(r.toolCalls) ? (r.toolCalls as unknown[]).length : 0,
+      tokensUsed: r.tokensTotal,
+    }));
+
+    return NextResponse.json({
+      sessions,
+      totalActive: sessions.length,
+      serverStatus: "running",
+    });
+  } catch (err) {
+    console.error("[API] sessions GET error:", err);
+    return NextResponse.json({
+      sessions: [],
+      totalActive: 0,
+      serverStatus: "unknown",
+    });
+  }
 }

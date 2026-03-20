@@ -107,6 +107,7 @@ model Organization {
   scheduleEvents ScheduleEvent[]
   modules        OrganizationModule[]
   activityLogs   ActivityLog[]
+  callRecords    CallRecord[]
 
   @@index([industry])
 }
@@ -218,6 +219,7 @@ model Client {
   workOrders     WorkOrder[]
   scheduleEvents ScheduleEvent[]
   contacts       Contact[]
+  callRecords    CallRecord[]
 
   @@index([organizationId])
   @@index([status])
@@ -342,6 +344,7 @@ model WorkOrder {
 
   // Relations
   scheduleEvents  ScheduleEvent[]
+  callRecords     CallRecord[]
 
   @@unique([organizationId, orderNumber])
   @@index([organizationId])
@@ -524,6 +527,108 @@ model Payment {
   createdAt   DateTime @default(now())
 
   @@index([invoiceId])
+}
+
+// ============================================================================
+// AI VOICE CALLS & RECEPTIONIST
+// ============================================================================
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CallStatus {
+  ACTIVE
+  COMPLETED
+  VOICEMAIL
+  MISSED
+  TRANSFERRED
+  FAILED
+}
+
+enum CallIntent {
+  SERVICE_REQUEST
+  APPOINTMENT
+  BILLING
+  EMERGENCY
+  GENERAL
+  SALES_INQUIRY
+}
+
+enum CallPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum CallSentiment {
+  POSITIVE
+  NEUTRAL
+  FRUSTRATED
+}
+
+model CallRecord {
+  id              String         @id @default(cuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Twilio metadata
+  callSid         String         @unique // Twilio Call SID — unique per call
+  streamSid       String?        // Twilio Media Stream SID
+
+  // Caller info
+  callerNumber    String
+  callerName      String?
+  callerCity      String?
+  callerState     String?
+
+  // Call properties
+  direction       CallDirection  @default(INBOUND)
+  status          CallStatus     @default(ACTIVE)
+  intent          CallIntent?
+  priority        CallPriority   @default(NORMAL)
+  sentiment       CallSentiment?
+
+  // Timing
+  startedAt       DateTime       @default(now())
+  endedAt         DateTime?
+  duration        Int            @default(0) // seconds
+
+  // AI Agent
+  agentId         String         @default("agent-alex")
+  agentName       String         @default("Alex")
+  model           String         @default("gpt-realtime-mini")
+  voice           String         @default("alloy")
+
+  // Conversation data (JSONB)
+  transcript      Json?          // Array of { speaker, text, timestamp }
+  summary         String?        // AI-generated call summary
+  toolCalls       Json?          // Array of { id, name, arguments, output, timestamp, durationMs }
+  actionsTaken    String[]       // Human-readable action list
+
+  // Linked items created during the call
+  workOrderId     String?        // FK to WorkOrder created during call
+  workOrder       WorkOrder?     @relation(fields: [workOrderId], references: [id])
+  clientId        String?        // FK to Client (existing or newly created)
+  client          Client?        @relation(fields: [clientId], references: [id])
+  appointmentBooked Boolean      @default(false)
+  isNewCustomer   Boolean        @default(false)
+
+  // Usage tracking
+  tokensInput     Int            @default(0)
+  tokensOutput    Int            @default(0)
+  tokensTotal     Int            @default(0)
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([startedAt])
+  @@index([callerNumber])
+  @@index([intent])
 }
 
 // ============================================================================

@@ -1429,3 +1429,86 @@ Caller → Twilio PSTN → TwiML (<Say> + <Connect><Stream>)
 - Three.js + Mapbox custom layer for GLB rendering (deferred)
 
 ---
+
+## Session 17 — March 19, 2026 (Receptionist Module — Real Data Wiring)
+
+### Context
+With the AI receptionist making live calls (Session 16), this session wired the entire receptionist module to real PostgreSQL data. Previously, the dashboard displayed hardcoded sample data and voice tools returned static responses. Now every call record is persisted to the database, the dashboard reads from live API routes, and voice tools query real customer/schedule/work-order data.
+
+### Goals
+1. Wire all voice tools (`lookup_customer`, `check_schedule`, `create_work_order`) to query/write real DB data
+2. Build API routes for the dashboard to read call records and stats from PostgreSQL
+3. Replace all sample data imports in the receptionist UI with live API fetching
+4. Seed the demo organization with ABC Carpenters client record
+5. Fix Prisma 7.5 + Next.js 16 Turbopack build compatibility
+
+### Database Architecture
+- **PostgreSQL on Railway** — single instance serving both the voice server (internal URL) and Vercel dashboard (public TCP proxy)
+- **Prisma 7.5** with `prisma-client` generator + `@prisma/adapter-pg` driver adapter
+- **Migration:** `20260320023815_init_all_tables` — all 18 models from schema.prisma
+- **Seed data:** Old Bishop Farm org, Josh user, 3 employees (Mike/Dave/Lisa), 4 clients (Johnson, ABC Carpenters, Oak Street, Sunset Senior), AI Receptionist module ACTIVE
+
+### Work Produced
+
+**New Files:**
+- `src/lib/voice/call-store.ts` — Prisma-based persistence layer for call records. Provides `createCallRecord()`, `updateCallRecord()`, `getCallRecords()`, `getCallRecordById()`, `getPhoneStats()`. Clean abstraction over Prisma for voice server and dashboard API.
+- `src/app/api/voice/call-records/route.ts` — GET endpoint with filtering (status, intent, date range, limit). Maps DB enums to UI display strings. Returns transformed records matching the dashboard's expected shape.
+- `src/app/api/voice/stats/route.ts` — GET endpoint returning aggregate KPI stats (total calls today, avg duration, missed rate, AI handled rate, leads captured, work orders created, appointments booked).
+- `prisma/seed.mts` — TypeScript seed script with PrismaPg adapter. Seeds demo org, user, employees, clients (including ABC Carpenters), and AI Receptionist module.
+- `prisma/seed.sql` — SQL equivalent of seed data (executed directly against Railway DB).
+- `prisma/migrations/20260320023815_init_all_tables/` — Initial migration for all 18 models.
+
+**Modified Files:**
+- `src/lib/db.ts` — Updated to use `PrismaPg` driver adapter (Prisma 7.5 requirement). Singleton pattern with connection string from `DATABASE_URL`.
+- `src/lib/voice/session-manager.ts` — Updated imports to use `createCallRecord`/`CallRecordInput` from call-store. Enum values now UPPERCASE to match Prisma schema. Async persistence with `.then()/.catch()` to avoid blocking call flow.
+- `src/lib/voice/tools.ts` — Fully rewritten. `lookup_customer` queries Client table by phone/name. `check_schedule` queries ScheduleEvent + Employee for availability. `create_work_order` writes to WorkOrder table with auto-generated order numbers. All tools have graceful DB error fallbacks.
+- `src/app/api/voice/sessions/route.ts` — Rewritten to query ACTIVE CallRecords from DB instead of returning hardcoded demo data.
+- `src/app/api/voice/status/route.ts` — Rewritten to update CallRecord status in DB on Twilio status webhooks.
+- `src/app/dashboard/ai-receptionist/page.tsx` — Fully rewritten (836 lines). Removed all sample-data-p2 imports. Types defined locally. Fetches from `/api/voice/call-records` + `/api/voice/stats` with `useState`/`useEffect`. 30-second polling for real-time updates. Loading spinner and empty state messaging.
+- `package.json` — Added `@prisma/adapter-pg`, `pg`, `@types/pg` dependencies.
+- `prisma/schema.prisma` — Added `CallRecord` model with full Twilio metadata, conversation data (JSONB transcript, tool calls), linked items (work order, client), and usage tracking.
+
+### Prisma 7.5 + Next.js 16 Turbopack Fix
+Prisma 7.5's `prisma-client` generator does NOT create an `index.ts` barrel file — exports are split across `client.ts`, `enums.ts`, etc. This caused `Module not found: Can't resolve '@/generated/prisma'` errors with Turbopack.
+
+**Fix applied:**
+1. Changed all imports from `@/generated/prisma` → `@/generated/prisma/client` (db.ts, call-store.ts, call-records/route.ts)
+2. Installed `@prisma/adapter-pg` + `pg` driver adapter (required by `prisma-client` generator — unlike deprecated `prisma-client-js`, the new generator requires an explicit adapter)
+3. Updated `db.ts` to construct PrismaClient with `PrismaPg` adapter
+4. Removed duplicate `prisma/seed.ts` (kept `seed.mts` with adapter)
+
+### Build Result
+Clean build: 29 routes compiled and generated successfully, including all 4 voice API routes.
+
+### Environment Variables Needed
+- **Vercel:** `DATABASE_URL` (public Railway URL) + `A1NT_ORG_ID=demo-org`
+- **Railway voice server:** `DATABASE_URL=${{Postgres.DATABASE_URL}}` (internal) + `A1NT_ORG_ID=demo-org`
+
+### Commits
+- Session 17 commit — receptionist module wired to real PostgreSQL data
+
+### Data Flow (Production Architecture)
+```
+Incoming Call → Twilio → Railway Voice Server
+  → session-manager.ts creates CallRecord (status=ACTIVE)
+  → tools.ts queries DB for customer/schedule data
+  → tools.ts writes WorkOrder on create_work_order
+  → session-manager.ts updates CallRecord (status=COMPLETED, transcript, summary)
+
+Dashboard → Vercel Serverless
+  → /api/voice/call-records → reads CallRecord from DB
+  → /api/voice/stats → aggregates KPI stats from DB
+  → /api/voice/sessions → reads ACTIVE CallRecords
+  → 30s polling for real-time updates
+
+Twilio Status Webhook → Vercel /api/voice/status
+  → Updates CallRecord status on call completion
+```
+
+### Next Up
+- Add `DATABASE_URL` + `A1NT_ORG_ID` to Vercel and Railway env vars
+- Test end-to-end: live call → DB write → dashboard display
+- Fine-tune Alex's personality/prompt
+- Multi-path voice engine abstraction layer
+
+---

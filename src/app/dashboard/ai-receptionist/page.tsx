@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Search,
   Phone,
@@ -26,6 +26,7 @@ import {
   Smile,
   Meh,
   Frown,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -62,16 +63,77 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
-import {
-  callRecords,
-  phoneStats,
-  callRouting,
-  type CallRecord,
-  type CallStatus,
-  type CallIntent,
-  type CallPriority,
-  type CallRouting,
-} from "@/lib/sample-data-p2";
+
+// ─── Types (matching API response shape) ──────────────────────────
+
+type CallStatus = "Active" | "Completed" | "Voicemail" | "Missed" | "Transferred" | "Failed";
+type CallIntent = "Service Request" | "Appointment" | "Billing" | "Emergency" | "General" | "Sales Inquiry";
+type CallPriority = "Low" | "Normal" | "High" | "Urgent";
+
+interface CallRecord {
+  id: string;
+  callerName: string;
+  callerPhone: string;
+  direction: "Inbound" | "Outbound";
+  status: CallStatus;
+  intent: CallIntent;
+  priority: CallPriority;
+  duration: string;
+  startTime: string;
+  date: string;
+  summary: string;
+  transcript: string;
+  actionsTaken: string[];
+  assignedTo: string | null;
+  workOrderCreated: string | null;
+  appointmentBooked: boolean;
+  isNewLead: boolean;
+  sentiment: "Positive" | "Neutral" | "Frustrated";
+}
+
+interface PhoneStats {
+  totalCallsToday: number;
+  avgWaitTime: string;
+  avgCallDuration: string;
+  missedCallRate: number;
+  aiHandledRate: number;
+  leadsCapture: number;
+  workOrdersCreated: number;
+  appointmentsBooked: number;
+}
+
+interface CallRouting {
+  id: string;
+  intent: CallIntent;
+  route: string;
+  afterHours: string;
+  priority: CallPriority;
+  enabled: boolean;
+}
+
+// ─── Static call routing rules (config, not DB data yet) ──────────
+
+const callRouting: CallRouting[] = [
+  { id: "rt-1", intent: "Emergency", route: "Immediate dispatch + notify on-call tech", afterHours: "AI handles + page on-call", priority: "Urgent", enabled: true },
+  { id: "rt-2", intent: "Service Request", route: "AI creates work order draft → Office review", afterHours: "AI captures details + schedules callback", priority: "Normal", enabled: true },
+  { id: "rt-3", intent: "Appointment", route: "AI books directly from calendar", afterHours: "AI books directly from calendar", priority: "Normal", enabled: true },
+  { id: "rt-4", intent: "Billing", route: "AI answers from invoice data → escalate if needed", afterHours: "Voicemail → flag for morning", priority: "Low", enabled: true },
+  { id: "rt-5", intent: "Sales Inquiry", route: "AI captures lead info → sales queue", afterHours: "AI captures lead info → sales queue", priority: "Normal", enabled: true },
+  { id: "rt-6", intent: "General", route: "AI answers FAQs → transfer to office if complex", afterHours: "Voicemail", priority: "Low", enabled: true },
+];
+
+// ─── Default empty stats ──────────────────────────────────────────
+
+const EMPTY_STATS: PhoneStats = {
+  totalCallsToday: 0,
+  avgWaitTime: "0:00",
+  avgCallDuration: "0:00",
+  missedCallRate: 0,
+  aiHandledRate: 0,
+  leadsCapture: 0,
+  workOrdersCreated: 0,
+  appointmentsBooked: 0,
+};
 
 // --- Helpers ---
 
@@ -98,6 +160,7 @@ const callStatusStyles: Record<CallStatus, string> = {
   Voicemail: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-0",
   Missed: "bg-red-500/15 text-red-700 dark:text-red-400 border-0",
   Transferred: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0",
+  Failed: "bg-red-500/15 text-red-700 dark:text-red-400 border-0",
 };
 
 function CallStatusBadge({ status }: { status: CallStatus }) {
@@ -170,13 +233,6 @@ function parseTranscript(transcript: string): { speaker: "AI" | "Caller" | "Syst
 const ALL_INTENTS: CallIntent[] = ["Emergency", "Service Request", "Appointment", "Billing", "Sales Inquiry", "General"];
 const ALL_STATUSES: CallStatus[] = ["Active", "Completed", "Voicemail", "Missed", "Transferred"];
 
-const routingPriorityStyle: Record<CallPriority, string> = {
-  Urgent: "bg-red-500/15 text-red-700 dark:text-red-400 border-0",
-  High: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0",
-  Normal: "",
-  Low: "",
-};
-
 // --- Component ---
 
 export default function AIReceptionistPage() {
@@ -186,12 +242,52 @@ export default function AIReceptionistPage() {
   const [intentFilter, setIntentFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  // ─── API state ─────────────────────────────────────────────────
+  const [records, setRecords] = useState<CallRecord[]>([]);
+  const [stats, setStats] = useState<PhoneStats>(EMPTY_STATS);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // ─── Fetch call records + stats from API ───────────────────────
+  const fetchData = useCallback(async () => {
+    try {
+      const [recordsRes, statsRes] = await Promise.all([
+        fetch("/api/voice/call-records"),
+        fetch("/api/voice/stats"),
+      ]);
+
+      if (recordsRes.ok) {
+        const data = await recordsRes.json();
+        setRecords(data.callRecords ?? []);
+      }
+
+      if (statsRes.ok) {
+        const data = await statsRes.json();
+        setStats(data);
+      }
+
+      setError(null);
+    } catch (err) {
+      console.error("Failed to fetch receptionist data:", err);
+      setError("Unable to connect to the database. Showing empty state.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    // Poll every 30s for live updates
+    const interval = setInterval(fetchData, 30_000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
   // Active call
-  const activeCall = callRecords.find((c) => c.status === "Active") ?? null;
+  const activeCall = records.find((c) => c.status === "Active") ?? null;
 
   // Filtered calls
   const filtered = useMemo(() => {
-    return callRecords.filter((call) => {
+    return records.filter((call) => {
       const q = search.toLowerCase();
       const matchesSearch =
         !q ||
@@ -201,7 +297,7 @@ export default function AIReceptionistPage() {
       const matchesStatus = statusFilter === "all" || call.status === statusFilter;
       return matchesSearch && matchesIntent && matchesStatus;
     });
-  }, [search, intentFilter, statusFilter]);
+  }, [records, search, intentFilter, statusFilter]);
 
   return (
     <div className="p-6 space-y-6 max-w-[1400px]" data-testid="ai-receptionist-page">
@@ -261,14 +357,14 @@ export default function AIReceptionistPage() {
       {/* KPI Cards — 2 rows of 4 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="kpi-row">
         {[
-          { label: "Calls Today", value: String(phoneStats.totalCallsToday), icon: Phone },
-          { label: "Avg Wait", value: phoneStats.avgWaitTime, icon: Clock },
-          { label: "AI Handled", value: `${phoneStats.aiHandledRate}%`, icon: Bot },
-          { label: "Missed Rate", value: `${phoneStats.missedCallRate}%`, icon: PhoneMissed },
-          { label: "Leads Captured", value: String(phoneStats.leadsCapture), icon: Users },
-          { label: "WOs Created", value: String(phoneStats.workOrdersCreated), icon: ClipboardList },
-          { label: "Appointments", value: String(phoneStats.appointmentsBooked), icon: Calendar },
-          { label: "Avg Duration", value: phoneStats.avgCallDuration, icon: BarChart3 },
+          { label: "Calls Today", value: String(stats.totalCallsToday), icon: Phone },
+          { label: "Avg Wait", value: stats.avgWaitTime, icon: Clock },
+          { label: "AI Handled", value: `${stats.aiHandledRate}%`, icon: Bot },
+          { label: "Missed Rate", value: `${stats.missedCallRate}%`, icon: PhoneMissed },
+          { label: "Leads Captured", value: String(stats.leadsCapture), icon: Users },
+          { label: "WOs Created", value: String(stats.workOrdersCreated), icon: ClipboardList },
+          { label: "Appointments", value: String(stats.appointmentsBooked), icon: Calendar },
+          { label: "Avg Duration", value: stats.avgCallDuration, icon: BarChart3 },
         ].map((kpi) => {
           const Icon = kpi.icon;
           return (
@@ -344,112 +440,121 @@ export default function AIReceptionistPage() {
       {viewTab === "calls" && (
         <Card data-testid="call-log-table">
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-4 w-[80px]">Time</TableHead>
-                  <TableHead className="w-8" />
-                  <TableHead>Caller</TableHead>
-                  <TableHead>Intent</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead className="text-right w-[70px]">Duration</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-8" />
-                  <TableHead>Actions Created</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((call) => (
-                  <TableRow
-                    key={call.id}
-                    className={`cursor-pointer ${call.status === "Active" ? "bg-emerald-500/[0.03]" : ""}`}
-                    onClick={() => setSelectedCall(call)}
-                    data-testid={`row-call-${call.id}`}
-                  >
-                    <TableCell className="pl-4 font-mono text-xs text-muted-foreground">
-                      {call.startTime}
-                    </TableCell>
-                    <TableCell>
-                      <DirectionIcon direction={call.direction} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate max-w-[160px]">{call.callerName}</p>
-                        <p className="text-[10px] font-mono text-muted-foreground">{call.callerPhone}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell><IntentBadge intent={call.intent} /></TableCell>
-                    <TableCell><PriorityBadge priority={call.priority} /></TableCell>
-                    <TableCell className="text-right font-mono text-sm">{call.duration}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        {call.status === "Active" && (
-                          <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                          </span>
-                        )}
-                        <CallStatusBadge status={call.status} />
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <SentimentIcon sentiment={call.sentiment} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        {call.workOrderCreated && (
-                          <Badge variant="outline" className="text-[10px] font-mono py-0 h-4">
-                            {call.workOrderCreated}
-                          </Badge>
-                        )}
-                        {call.appointmentBooked && (
-                          <Badge variant="outline" className="text-[10px] py-0 h-4">
-                            <Calendar className="h-2.5 w-2.5 mr-0.5" />
-                            Apt
-                          </Badge>
-                        )}
-                        {call.isNewLead && (
-                          <Badge variant="outline" className="text-[10px] py-0 h-4">
-                            <Zap className="h-2.5 w-2.5 mr-0.5" />
-                            Lead
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-muted transition-colors"
-                          data-testid={`actions-call-${call.id}`}
-                        >
-                          <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setSelectedCall(call)} data-testid={`action-view-call-${call.id}`}>
-                            View Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem data-testid={`action-callback-${call.id}`}>
-                            Schedule Callback
-                          </DropdownMenuItem>
-                          <DropdownMenuItem data-testid={`action-create-wo-${call.id}`}>
-                            Create Work Order
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filtered.length === 0 && (
+            {loading ? (
+              <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Loading call records...</span>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
-                      No calls match your filters.
-                    </TableCell>
+                    <TableHead className="pl-4 w-[80px]">Time</TableHead>
+                    <TableHead className="w-8" />
+                    <TableHead>Caller</TableHead>
+                    <TableHead>Intent</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead className="text-right w-[70px]">Duration</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-8" />
+                    <TableHead>Actions Created</TableHead>
+                    <TableHead className="w-10" />
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((call) => (
+                    <TableRow
+                      key={call.id}
+                      className={`cursor-pointer ${call.status === "Active" ? "bg-emerald-500/[0.03]" : ""}`}
+                      onClick={() => setSelectedCall(call)}
+                      data-testid={`row-call-${call.id}`}
+                    >
+                      <TableCell className="pl-4 font-mono text-xs text-muted-foreground">
+                        {call.startTime}
+                      </TableCell>
+                      <TableCell>
+                        <DirectionIcon direction={call.direction} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate max-w-[160px]">{call.callerName}</p>
+                          <p className="text-[10px] font-mono text-muted-foreground">{call.callerPhone}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell><IntentBadge intent={call.intent} /></TableCell>
+                      <TableCell><PriorityBadge priority={call.priority} /></TableCell>
+                      <TableCell className="text-right font-mono text-sm">{call.duration}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {call.status === "Active" && (
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                            </span>
+                          )}
+                          <CallStatusBadge status={call.status} />
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <SentimentIcon sentiment={call.sentiment} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          {call.workOrderCreated && (
+                            <Badge variant="outline" className="text-[10px] font-mono py-0 h-4">
+                              {call.workOrderCreated}
+                            </Badge>
+                          )}
+                          {call.appointmentBooked && (
+                            <Badge variant="outline" className="text-[10px] py-0 h-4">
+                              <Calendar className="h-2.5 w-2.5 mr-0.5" />
+                              Apt
+                            </Badge>
+                          )}
+                          {call.isNewLead && (
+                            <Badge variant="outline" className="text-[10px] py-0 h-4">
+                              <Zap className="h-2.5 w-2.5 mr-0.5" />
+                              Lead
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-muted transition-colors"
+                            data-testid={`actions-call-${call.id}`}
+                          >
+                            <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setSelectedCall(call)} data-testid={`action-view-call-${call.id}`}>
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem data-testid={`action-callback-${call.id}`}>
+                              Schedule Callback
+                            </DropdownMenuItem>
+                            <DropdownMenuItem data-testid={`action-create-wo-${call.id}`}>
+                              Create Work Order
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filtered.length === 0 && !loading && (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
+                        {records.length === 0
+                          ? "No call records yet. Make a test call to see data here."
+                          : "No calls match your filters."}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       )}

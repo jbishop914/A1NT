@@ -3,11 +3,26 @@
    Receives call status updates from Twilio (initiated, ringing, answered,
    completed, busy, no-answer, canceled, failed).
    
+   Updates the CallRecord status in PostgreSQL when a call ends.
+   
    Configure in Twilio console under the phone number's "Status Callback URL":
    https://your-domain.com/api/voice/status
    ──────────────────────────────────────────────────────────────────────── */
 
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+
+/** Map Twilio call status to our CallStatus enum */
+const STATUS_MAP: Record<string, "ACTIVE" | "COMPLETED" | "MISSED" | "FAILED"> = {
+  initiated: "ACTIVE",
+  ringing: "ACTIVE",
+  "in-progress": "ACTIVE",
+  completed: "COMPLETED",
+  busy: "MISSED",
+  "no-answer": "MISSED",
+  canceled: "MISSED",
+  failed: "FAILED",
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,16 +40,25 @@ export async function POST(request: NextRequest) {
         ` | ${from} → ${to}`
     );
 
-    // Phase 2: Persist call records to database
-    // Phase 3: Update agent interaction logs
-    // Phase 4: Trigger post-call analysis (sentiment, corrections)
-
-    if (callStatus === "completed" || callStatus === "failed") {
-      console.log(
-        `[Voice] Call ${callSid} ended: status=${callStatus}` +
-          `${duration ? `, duration=${duration}s` : ""}` +
-          `${timestamp ? `, at=${timestamp}` : ""}`
-      );
+    // Update the call record in the database if it exists
+    if (callSid && (callStatus === "completed" || callStatus === "failed" || callStatus === "busy" || callStatus === "no-answer" || callStatus === "canceled")) {
+      const dbStatus = STATUS_MAP[callStatus] ?? "COMPLETED";
+      
+      try {
+        await db.callRecord.update({
+          where: { callSid },
+          data: {
+            status: dbStatus,
+            endedAt: new Date(),
+            ...(duration ? { duration: parseInt(duration, 10) } : {}),
+          },
+        });
+        console.log(`[Voice] Call record ${callSid} updated: status=${dbStatus}`);
+      } catch (err) {
+        // Record might not exist yet (race condition) or might have been created
+        // by the voice server's endSession(). That's fine — log and continue.
+        console.log(`[Voice] Could not update call record ${callSid} (may not exist yet or already updated)`);
+      }
     }
 
     return NextResponse.json({ received: true });
