@@ -1354,3 +1354,78 @@ Continuation of Session 14. The right-click "Set as Default View" context menu w
 - Three.js + Mapbox custom layer for GLB rendering (deferred)
 
 ---
+
+## Session 16 — March 19, 2026
+
+### Context
+Direct continuation of Session 15. Primary goal: debug and fix the Twilio → Railway → OpenAI Realtime voice pipeline that was producing silence after the TwiML greeting. Also: ElevenLabs Conversational AI research completed, and initial discussion of multi-path voice architecture for A/B testing different engines.
+
+### The Bug Hunt — Three Root Causes Found
+
+The voice pipeline had been producing silence on every test call since Session 15. Railway logs showed OpenAI events flowing (session.created, session.updated, response.done, speech detection) but callers heard nothing after "Please hold while I connect you." Three separate issues were identified and fixed iteratively:
+
+#### Root Cause 1: streamSid Timing Race Condition
+- **Problem:** OpenAI WebSocket was opened immediately when Twilio's WebSocket connected, BEFORE the Twilio `start` event provided `streamSid`. When `response.create` triggered OpenAI to generate audio, the audio delta handler at line 192 silently dropped ALL frames because `streamSid` was still `null`.
+- **Fix:** Restructured to match [OpenAI's official Twilio demo](https://github.com/openai/openai-realtime-twilio-demo) architecture — defer OpenAI connection until AFTER Twilio's `start` event sets `streamSid`. New flow: Twilio `start` → `streamSid` set → `connectToOpenAI()` → `session.update` → `response.create` → audio deltas arrive with `streamSid` guaranteed.
+- **Commit:** `729ed38`
+
+#### Root Cause 2: Wrong session.update Format (No Audio Deltas Generated)
+- **Problem:** `session.update` was using a nested `audio.input.format.type: "audio/pcmu"` structure. The OpenAI Realtime API reference specifies FLAT fields: `input_audio_format: "g711_ulaw"`, `output_audio_format: "g711_ulaw"`, `modalities` (not `output_modalities`), `voice` at top level, `turn_detection` at top level. The nested format was accepted without error but OpenAI fell back to text-only responses — Railway logs confirmed `response.created` → `response.done` with ZERO `response.output_audio.delta` events.
+- **Fix:** Rewrote session config to use flat format per API reference. Added diagnostic logging: full session.update payload on send, session.updated response showing effective config, audio delta events with type/size/streamSid.
+- **Commit:** `87609cd`
+
+#### Root Cause 3: Wrong Tools Format (session.update Rejected)
+- **Problem:** Incorrectly wrapped tools in Chat Completions format: `{ type: "function", function: { name, description, parameters } }`. The Realtime API uses a FLAT tool format: `{ type: "function", name, description, parameters }`. Railway logs showed the smoking gun: `"Missing required parameter: 'session.tools[0].name'"` — OpenAI rejected the entire session.update, disconnected the WebSocket.
+- **Fix:** Reverted to passing `AGENT_TOOLS` directly (they were correct all along in tools.ts).
+- **Commit:** `c51c67c` — **This was the final fix that made it work.**
+
+### Result
+First successful AI receptionist call. "Alex" from TripleA Plumbing answered, stayed in character, responded quickly with no uncomfortable pauses, and handled free-form conversation naturally. Speech-to-speech latency was excellent — sub-second response times throughout the call.
+
+### Key Learnings
+1. **OpenAI Realtime API has TWO different format dialects** — Twilio's blog examples use a nested `audio.input.format` structure that may work with some model versions, but the official API reference uses flat fields (`input_audio_format`, `output_audio_format`). The flat format is authoritative.
+2. **Realtime API tool format ≠ Chat Completions tool format.** Realtime uses `{ type, name, description, parameters }` (flat). Chat Completions uses `{ type, function: { name, description, parameters } }` (wrapped). Easy to confuse.
+3. **Railway deploy logs are essential for debugging** — the OpenAI error message was only visible in stderr and was interleaved with stdout in Railway's log viewer.
+4. **The `response.audio.delta` (beta) vs `response.output_audio.delta` (GA) event name difference is real** — we now handle both in the switch statement.
+
+### ElevenLabs Research Completed
+A comprehensive 762-line research report was produced covering ElevenLabs Conversational AI platform capabilities, pricing, latency characteristics, custom voice cloning, native Twilio integration, and function calling via client tools. Saved to `/workspace/elevenlabs-research.md`.
+
+### Multi-Path Voice Architecture — Discussion Started
+Josh wants to build parallel voice pipeline paths for A/B/C testing:
+- **Path A:** OpenAI Realtime (speech-to-speech, lowest latency, current implementation)
+- **Path B:** ElevenLabs Conversational AI (custom cloned voices, native Twilio, $0.10/min)
+- **Path C:** Hybrid STT → LLM → TTS (most flexible, swap any component)
+- **Path D:** OpenAI STT + reasoning → ElevenLabs TTS (custom voice + OpenAI intelligence)
+
+The vision: a `VoiceEngine` interface abstraction where pipeline path is selectable per-agent, per-role, or per-call. Receptionist managers might want Path A for speed; premium customer-facing roles might want Path B for brand voice; complex reasoning roles might want Path C for accuracy. "The choice is yours."
+
+### Commits
+- `729ed38` — fix(voice): defer OpenAI connection until after Twilio start event
+- `87609cd` — fix(voice): use flat session.update format per OpenAI API reference
+- `c51c67c` — fix(voice): revert tools to flat format — Realtime API ≠ Chat Completions
+
+### Files Changed
+- `src/lib/voice/session-manager.ts` — Major rewrite: deferred OpenAI connection, flat session.update format, flat tools, diagnostic logging, dual audio delta event handling
+
+### Architecture Note — Voice Pipeline (Working State)
+```
+Caller → Twilio PSTN → TwiML (<Say> + <Connect><Stream>)
+  → Vercel /api/voice/incoming (returns TwiML)
+  → Railway wss://a1nt-production.up.railway.app/api/voice/media-stream
+    → Twilio "start" event → streamSid captured
+    → connectToOpenAI() → wss://api.openai.com/v1/realtime?model=gpt-realtime-mini
+    → session.update (flat format, g711_ulaw, server_vad, 6 tools)
+    → response.create (triggers AI greeting)
+    → Bidirectional audio proxy: Twilio ↔ OpenAI
+    → Function calling: OpenAI → tools.ts → response back
+    → Interruption handling: speech_started → truncate + clear
+```
+
+### Next Up
+- Fine-tune Alex's personality/prompt for more natural conversation
+- Multi-path voice engine abstraction layer
+- ElevenLabs Path B implementation (parallel to OpenAI Path A)
+- Three.js + Mapbox custom layer for GLB rendering (deferred)
+
+---
