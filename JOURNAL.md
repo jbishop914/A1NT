@@ -2054,3 +2054,97 @@ Phase A — Foundation (P0 items 1-8):
 - Work Orders: create form, status transitions, cross-module connections
 
 ---
+
+## Session 21 — March 20, 2026 (Afternoon)
+**Focus:** Online Booking System — P0 Item #1 from Feature Gap Analysis
+
+### Summary
+Completed the full Online Booking System build — all 7 steps from spec to implementation. This was the first P0 item from the Feature Gap Analysis roadmap. The system delivers two booking paths: embeddable widget for existing websites and Website Builder integration for clients without a site.
+
+### What Was Built
+
+#### 1. Service Area Settings UI (Step 2)
+- **New component:** `ServiceAreaSettings` — interactive Mapbox map in Settings page
+- Two modes: **Radius** (click center point + slider for 1-100mi) and **Polygon** (draw boundary via @mapbox/mapbox-gl-draw)
+- Business hours editor with per-day toggle and time pickers
+- Reads/writes to `/api/organization/service-area` endpoint
+- Visual warning when no service area is defined (booking disabled)
+- Emerald-themed to match A1NT design system
+- Wired as expandable panel under Settings → Service Area
+
+#### 2. Booking Widget (Step 4)
+- **New component:** `BookingWidget` — 5-step multi-step form
+  1. Appointment Type selection (Estimate, Follow Up, Product Demo, Service Call, Warranty)
+  2. Contact Information (name, email, phone)
+  3. Service Address + Service Area Validation
+  4. Date & Time selection (30-day window, real-time slot availability)
+  5. Confirmation summary + submission
+- **6 pre-made themes:** Clean Light, Warm Light, Emerald Light, Slate Dark, Carbon Dark, Midnight
+- All inline styles — zero external CSS dependencies for embed compatibility
+- CSS variable-based theming (`--bw-*` tokens)
+- Responsive: 320px to 480px
+- Success state with email confirmation message
+
+#### 3. Embeddable Widget (Step 5)
+- `booking-loader.js` — vanilla JS loader for external websites
+  - `<script src="...booking-loader.js" data-org-id="..." data-theme="...">`
+  - Creates iframe, handles auto-resize messaging, dispatches `a1nt:booking-complete` event
+- `/widget/booking` page — standalone hosted widget renderer
+- **BookingWidgetPreview** admin panel — theme selector + embed code + copy button + platform guides (WordPress, Squarespace, Wix, Shopify)
+
+#### 4. Website Builder Integration (Step 6)
+- Added `booking` SectionType to site generator
+- `renderBooking()` embeds the widget iframe in generated sites
+- Hero CTA auto-updates to "Schedule a Free Estimate Now — We're Available!" when booking is enabled
+- Nav CTA changes to "Book Now" when booking section is active
+- CalendarCheck icon in Website Builder section editor
+
+#### 5. AI Receptionist Integration (Step 7)
+- Extended voice prompt builder with service area awareness:
+  - `CompanyInfo` now includes `serviceAreaType` and `serviceAreaRadius`
+  - `LiveContext` now includes `bookingFlagAddress` and `bookingFlagOutOfArea`
+- Added Service Area Policy section to company layer prompts
+- Live context flag: when caller matches a recent out-of-area booking attempt, receptionist gets:
+  - Warning banner with flagged address
+  - Script: confirm address → politely decline if out-of-area → note new address if different
+  - Tracking of out-of-area inquiry patterns for expansion analysis
+
+### Architecture Decisions
+- Widget uses all inline styles (no Tailwind dependency) — critical for cross-origin embedding
+- Themes are CSS-variable based — easy to add custom themes later (color picker, glassmorphism)
+- Service area validation happens server-side via existing geo utilities (`isInServiceArea()`)
+- Booking widget communicates with host page via `postMessage` for resize and completion events
+- The widget page (`/widget/booking`) shares root layout but is self-contained in iframe
+
+### Files Added/Modified
+- `src/components/service-area-settings.tsx` — Service Area Settings panel (800+ lines)
+- `src/components/booking-widget/booking-widget.tsx` — Multi-step booking form (1000+ lines)
+- `src/components/booking-widget/themes.ts` — 6 pre-made themes with CSS variable mapping
+- `src/components/booking-widget/index.ts` — Barrel exports
+- `src/components/booking-widget-preview.tsx` — Admin preview + embed code panel
+- `src/app/widget/booking/page.tsx` — Hosted widget page for iframe embedding
+- `public/widget/booking-loader.js` — Embeddable loader script
+- `src/lib/site-generator.ts` — Added booking section renderer + hero CTA updates
+- `src/lib/sample-data-p3.ts` — Added "booking" to SectionType
+- `src/app/dashboard/website-builder/page.tsx` — Added booking to sectionConfig
+- `src/app/dashboard/settings/page.tsx` — Added Service Area expandable panel
+- `src/lib/voice/prompts.ts` — Service area awareness in AI Receptionist
+
+### Commits (Session 21)
+- `8eae5f5` — feat(booking): Service Area settings UI with Mapbox radius + polygon drawing
+- `649c299` — feat(booking): Multi-step booking widget with 6 pre-made themes
+- `96e50b5` — feat(booking): Embeddable widget loader + hosted widget page
+- `50c70e7` — feat(booking): AI Receptionist service area awareness in system prompt
+- `7fe0330` — feat(booking): Website Builder booking section integration
+
+### Feature Gap Roadmap Progress
+- **P0 Item #1: Online Booking ✅ COMPLETE**
+- Remaining P0 items: Payment Processing, QuickBooks, Scheduling, Work Orders, CRM CRUD, Mobile Field View, Estimates
+
+### Up Next
+Continue Phase A (P0) from Feature Gap Analysis:
+- P0 Item #2: Payment Processing (Stripe Connect)
+- P0 Item #3: QuickBooks Online API sync
+- P0 Item #4: Scheduling CRUD (date nav, drag-and-drop, dispatch)
+
+---
