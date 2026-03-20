@@ -1943,3 +1943,114 @@ User tested outbound calling and found 3 bugs: (1) no campaign detail fields in 
 - Failed stuck ACTIVE outbound CallRecords from testing
 
 ---
+
+## Session 20 — March 20, 2026 (System Audit, Competitive Analysis & Feature Gap Roadmap)
+
+### Context
+Josh asked about the AI Receptionist page configuration, which surfaced overlap problems between AI Receptionist and Operator modules. This led to a full system audit, competitive analysis, and feature gap roadmap — shifting from building to strategic planning.
+
+### Key Decisions
+- **Feature Gap Analysis is now the active guiding roadmap** for all A1NT development until explicitly retired
+- Reports and documents will be stored in `docs/reports/` in the repo for permanent versioning
+- JOURNAL.md continues to be updated every session and committed to git
+- **Product direction expanded**: A1NT targets not just trades/contracting but also general business types (commercial, retail, industrial) — broad SMB operations platform
+- **Pricing confirmed**: $9/admin seat + ~$2/employee user as the target
+
+### Work Produced
+
+#### 1. Full System Audit (768 lines)
+Audited all 18 dashboard pages with granular detail:
+- **2 of 18 modules live** (AI Receptionist + Operator), 16 on hardcoded demo data (~116KB across 5 sample files)
+- **4 overlap problems identified**: Call Routing duplication (AI Receptionist vs Operator), Employee data fragmentation (3 separate datasets), AI Agent management spread (4 pages), Map/Geo duplication
+- **29 demo data items cataloged** with exact file paths and line numbers
+- **19 missing Prisma models** across 6 modules
+- **Proposed sidebar reorganization**: COMMAND → OPERATIONS → PEOPLE & ASSETS → COMMUNICATIONS → INTELLIGENCE → PLATFORM
+
+Deliverable: `docs/reports/a1nt-system-status-roadmap.pdf` (12 pages)
+
+#### 2. Competitive Analysis (16 competitors)
+Researched 16 platforms across 4 categories:
+- **Field Service Management**: ServiceTitan, Housecall Pro, Jobber, FieldEdge, ServiceM8
+- **AI Receptionist / Virtual Phone**: Smith.ai, Ruby, Dialpad AI, Nextiva
+- **AI Agent Builders**: Relevance AI, Bland.ai, Synthflow, Air.ai
+- **All-in-One SMB Ops**: GoHighLevel, Odoo, Zoho One
+
+Key finding: A1NT at $9/admin + $2/tech = $17/mo for 5-person team vs ServiceTitan at $1,225-$2,500/mo (72x more expensive)
+
+Deliverable: `docs/reports/a1nt-competitive-analysis.pdf` (10 pages)
+
+#### 3. Feature Gap Analysis — The Active Roadmap (39 items)
+Mapped ServiceTitan's complete feature set against A1NT's 18 modules. Every gap classified and prioritized:
+
+**P0 — Table Stakes (8 items, must-have for launch):**
+1. Online Booking Widget — MISSING
+2. Payment Processing & Online Bill Pay — MISSING
+3. Accounting Integration (QuickBooks/Xero) — MISSING
+4. Scheduling & Dispatch Board (production-ready) — LIMITED
+5. Work Order Lifecycle (end-to-end) — LIMITED
+6. Client/CRM Full CRUD + History — LIMITED
+7. Mobile Technician App / Field View — MISSING
+8. Estimates & Proposals — LIMITED
+
+**P1 — High Impact (10 items, retention drivers):**
+9. Service Agreements & Memberships
+10. Pricebook / Service Catalog
+11. Customer Portal
+12. Two-Way SMS & Automated Alerts
+13. Timesheets, Payroll Prep, Commissions
+14. Job Costing (Real-Time)
+15. Equipment/Asset Tracking (Per-Client)
+16. Lead Management & Sales Pipeline (Full)
+17. Marketing Campaign Engine (Email/SMS)
+18. Dispatch Optimization / Route Optimization
+
+**P2 — Competitive Parity (9 items):**
+19-27: Truck inventory, POs/3-way matching, digital forms, GPS tracking, call tracking, multi-party billing, construction/project management, AR/AP, custom reporting
+
+**P3 — Premium/Future (6 items):**
+28-33: Open API/marketplace, multi-tenant/franchise, AI field assistant, AI coaching, embedded financing, automated pricebook management
+
+**AI-Native Extensions (6 items, beyond any competitor):**
+E1-E6: AI estimate generator, full workflow automation, voice-to-daily-log, AI quality control, predictive maintenance, autonomous AI dispatch
+
+**Build sequence:**
+- Phase A (Foundation) → Phase B (Growth Engine) → Phase C (Depth) → Phase D (Moat)
+
+Deliverable: `docs/reports/a1nt-feature-gap-analysis.pdf` (15 pages)
+
+#### 4. Journal & Repo Hygiene
+- Surfaced JOURNAL.md to Josh (1,945 lines, 27 sessions — he hadn't seen it before)
+- Pushed all 3 PDFs to `docs/reports/` in the repo
+- Confirmed all future reports will be versioned in `docs/reports/`
+
+### Files Added/Modified
+- `docs/reports/a1nt-system-status-roadmap.pdf` — 12-page system audit
+- `docs/reports/a1nt-competitive-analysis.pdf` — 10-page competitive analysis
+- `docs/reports/a1nt-feature-gap-analysis.pdf` — 15-page feature gap roadmap (THE active roadmap)
+
+### Commits
+- `159a7da` — docs: add system audit/roadmap + competitive analysis PDFs
+- `f3c4ae6` — docs: add feature gap analysis PDF — 39 items prioritized vs ServiceTitan
+
+### A1NT Advantages Identified (Already Ahead)
+- AI Receptionist (live, production-wired)
+- AI Agent Builder (no competitor equivalent)
+- Outbound AI Calling (unique)
+- Operator / Call Routing (sophisticated, production-wired)
+- Website Builder (built-in, ServiceTitan has none)
+- Command Center / Map (Mapbox, drawing tools, 3D)
+- Client Intelligence / AI Analysis (unique)
+- Pricing (72x cheaper than ServiceTitan)
+
+### Up Next
+Phase A — Foundation (P0 items 1-8):
+- Wire existing modules to database with full CRUD
+- Build mobile-responsive field view
+- Payment processing (Stripe Connect)
+- Accounting sync (QuickBooks Online API)
+- Online booking widget
+- Estimates & proposals builder
+- Scheduling: date navigation, drag-and-drop, dispatch view
+- Work Orders: create form, status transitions, cross-module connections
+
+---
