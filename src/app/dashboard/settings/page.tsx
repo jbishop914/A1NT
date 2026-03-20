@@ -1,10 +1,11 @@
 "use client";
 
-import { Settings, Building2, Users, Shield, Bell, Palette, Map } from "lucide-react";
+import { Settings, Building2, Users, Shield, Bell, Palette, Map, MapPin } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useState } from "react";
 import { CommandCenterSettingsPanel } from "@/components/command-center-settings";
+import { ServiceAreaSettings } from "@/components/service-area-settings";
 
 const settingsSections = [
   {
@@ -12,6 +13,13 @@ const settingsSections = [
     icon: Map,
     title: "Command Center",
     description: "Map style, background, logo overlay, default view",
+    expandable: true,
+  },
+  {
+    id: "service-area",
+    icon: MapPin,
+    title: "Service Area",
+    description: "Define your service boundary, radius, and business hours",
     expandable: true,
   },
   {
@@ -69,7 +77,9 @@ export default function SettingsPage() {
                 className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-accent/50 transition-colors"
                 onClick={() => {
                   if (section.expandable) {
-                    setExpandedSection(expandedSection === section.id ? null : section.id);
+                    setExpandedSection(
+                      expandedSection === section.id ? null : section.id
+                    );
                   }
                 }}
                 data-testid={`settings-${section.id}`}
@@ -84,6 +94,12 @@ export default function SettingsPage() {
               {section.id === "command-center" && expandedSection === "command-center" && (
                 <div className="border-t border-border bg-muted/10">
                   <CommandCenterSettingsPanel />
+                </div>
+              )}
+              {/* Expandable Service Area panel */}
+              {section.id === "service-area" && expandedSection === "service-area" && (
+                <div className="border-t border-border bg-muted/10">
+                  <ServiceAreaSettings />
                 </div>
               )}
               {i < settingsSections.length - 1 && <Separator />}
