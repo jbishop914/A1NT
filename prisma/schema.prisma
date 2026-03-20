@@ -97,6 +97,13 @@ model Organization {
   templateId    String?
   template      Template?    @relation(fields: [templateId], references: [id])
 
+  // Service area (GeoJSON)
+  serviceAreaType    ServiceAreaType?     // RADIUS or POLYGON
+  serviceAreaRadius  Float?               // miles (if RADIUS type)
+  serviceAreaCenter  Json?                // {lat, lng} center point
+  serviceAreaPolygon Json?                // GeoJSON polygon coordinates
+  businessHours      Json?                // {mon: {open: "08:00", close: "17:00"}, ...}
+
   // Relations
   users              User[]
   clients            Client[]
@@ -113,6 +120,9 @@ model Organization {
   routingOverrides   RoutingOverride[]
   customRoutingRules CustomRoutingRule[]
   routingSchedule    RoutingScheduleBlock[]
+  bookings           Booking[]
+  bookingTypes       BookingType[]
+  bookingFlags       BookingFlag[]
 
   @@index([industry])
 }
@@ -225,6 +235,7 @@ model Client {
   scheduleEvents ScheduleEvent[]
   contacts       Contact[]
   callRecords    CallRecord[]
+  bookings       Booking[]
 
   @@index([organizationId])
   @@index([status])
@@ -269,6 +280,8 @@ model Employee {
   // Relations
   workOrders     WorkOrder[]
   scheduleEvents ScheduleEvent[]
+  bookingTypes   BookingType[]
+  bookings       Booking[]
 
   @@index([organizationId])
 }
@@ -350,6 +363,7 @@ model WorkOrder {
   // Relations
   scheduleEvents  ScheduleEvent[]
   callRecords     CallRecord[]
+  bookings        Booking[]
 
   @@unique([organizationId, orderNumber])
   @@index([organizationId])
@@ -405,6 +419,9 @@ model ScheduleEvent {
 
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
+
+  // Booking linkage
+  bookings        Booking[]
 
   @@index([organizationId])
   @@index([assigneeId])
@@ -833,6 +850,140 @@ model RoutingScheduleBlock {
 
   @@index([organizationId])
   @@index([day])
+}
+
+// ============================================================================
+// ONLINE BOOKING SYSTEM
+// ============================================================================
+
+enum ServiceAreaType {
+  RADIUS
+  POLYGON
+}
+
+enum BookingStatus {
+  PENDING       // Submitted, not yet confirmed
+  CONFIRMED     // Confirmed by office/auto-confirmed
+  SCHEDULED     // Linked to a ScheduleEvent
+  COMPLETED     // Appointment completed
+  CANCELLED     // Cancelled by customer or office
+  NO_SHOW       // Customer didn't show
+}
+
+enum BookingTypeEnum {
+  ESTIMATE
+  FOLLOW_UP
+  PRODUCT_DEMO
+  SERVICE_CALL
+  WARRANTY
+}
+
+model BookingType {
+  id                String          @id @default(cuid())
+  organizationId    String
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  type              BookingTypeEnum
+  label             String          // Display name (customizable)
+  durationMinutes   Int             // Default: 30, 30, 60, 60, 60
+  description       String?         // Shown to customer
+  isActive          Boolean         @default(true)
+  color             String?         // For calendar display
+  sortOrder         Int             @default(0)
+
+  // Assignment rules
+  autoAssign        Boolean         @default(false)
+  assignToEmployeeId String?        // Default assignee if autoAssign
+  assignToEmployee  Employee?       @relation(fields: [assignToEmployeeId], references: [id])
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  bookings          Booking[]
+
+  @@unique([organizationId, type])
+  @@index([organizationId])
+}
+
+model Booking {
+  id                String          @id @default(cuid())
+  organizationId    String
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Customer info (public — no auth required)
+  customerName      String
+  customerPhone     String
+  customerEmail     String?
+  serviceAddress    String
+  serviceCity       String?
+  serviceState      String?
+  serviceZip        String?
+  serviceLat        Float?          // Geocoded latitude
+  serviceLng        Float?          // Geocoded longitude
+
+  // Booking details
+  bookingTypeId     String
+  bookingType       BookingType     @relation(fields: [bookingTypeId], references: [id])
+  requestedDate     DateTime        // Requested appointment date/time
+  endTime           DateTime?       // Calculated from duration
+  description       String?         // Customer description of work needed
+  status            BookingStatus   @default(PENDING)
+
+  // Auto-categorization
+  detectedCategory  String?         // AI-categorized service type
+  estimatedDuration Int?            // Override if AI suggests different duration
+
+  // Linkage to internal records
+  scheduleEventId   String?         // Linked ScheduleEvent once scheduled
+  scheduleEvent     ScheduleEvent?  @relation(fields: [scheduleEventId], references: [id])
+  workOrderId       String?         // Linked WorkOrder if one is created
+  workOrder         WorkOrder?      @relation(fields: [workOrderId], references: [id])
+  clientId          String?         // Linked Client if matched/created
+  client            Client?         @relation(fields: [clientId], references: [id])
+  assigneeId        String?         // Assigned tech/employee
+  assignee          Employee?       @relation(fields: [assigneeId], references: [id])
+
+  // Source tracking
+  source            String          @default("widget") // "widget", "website", "api"
+  widgetTheme       String?         // Which theme was used
+  referrer          String?         // Referring URL
+
+  // Confirmation
+  confirmedAt       DateTime?
+  confirmedBy       String?         // user ID or "auto"
+  cancelledAt       DateTime?
+  cancelReason      String?
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  flags             BookingFlag[]
+
+  @@index([organizationId])
+  @@index([requestedDate])
+  @@index([status])
+  @@index([customerPhone])
+}
+
+model BookingFlag {
+  id                String          @id @default(cuid())
+  organizationId    String
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bookingId         String?
+  booking           Booking?        @relation(fields: [bookingId], references: [id])
+
+  flagType          String          // "out-of-service-area", "duplicate", "after-hours", "suspicious"
+  description       String?
+  serviceAddress    String?         // The address that was flagged
+  isResolved        Boolean         @default(false)
+  resolvedAt        DateTime?
+  resolvedBy        String?
+  resolvedNote      String?
+
+  createdAt         DateTime        @default(now())
+
+  @@index([organizationId])
+  @@index([flagType])
 }
 
 // ============================================================================
