@@ -31,6 +31,7 @@ import {
   Layers,
   Headset,
   CreditCard,
+  Mail,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -201,6 +202,11 @@ const navSections: NavSection[] = [
         label: "Sales & Marketing",
         href: "/dashboard/sales-marketing",
         icon: TrendingUp,
+      },
+      {
+        label: "Campaigns & Messages",
+        href: "/dashboard/email",
+        icon: Mail,
       },
       {
         label: "Financial Reports",

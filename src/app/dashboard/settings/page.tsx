@@ -1,12 +1,13 @@
 "use client";
 
-import { Settings, Building2, Users, Shield, Bell, Palette, Map, MapPin, CreditCard } from "lucide-react";
+import { Settings, Building2, Users, Shield, Bell, Palette, Map, MapPin, CreditCard, Mail } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useState } from "react";
 import { CommandCenterSettingsPanel } from "@/components/command-center-settings";
 import { ServiceAreaSettings } from "@/components/service-area-settings";
 import { PaymentSettings } from "@/components/payment-settings";
+import { EmailSettings } from "@/components/email-settings";
 
 const settingsSections = [
   {
@@ -28,6 +29,13 @@ const settingsSections = [
     icon: CreditCard,
     title: "Payments",
     description: "Accept online payments, manage Stripe Connect, transaction fees",
+    expandable: true,
+  },
+  {
+    id: "email",
+    icon: Mail,
+    title: "Email",
+    description: "Sending domains, notification triggers, campaign settings",
     expandable: true,
   },
   {
@@ -114,6 +122,12 @@ export default function SettingsPage() {
               {section.id === "payments" && expandedSection === "payments" && (
                 <div className="border-t border-border bg-muted/10">
                   <PaymentSettings />
+                </div>
+              )}
+              {/* Expandable Email panel */}
+              {section.id === "email" && expandedSection === "email" && (
+                <div className="border-t border-border bg-muted/10">
+                  <EmailSettings />
                 </div>
               )}
               {i < settingsSections.length - 1 && <Separator />}

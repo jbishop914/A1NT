@@ -124,6 +124,14 @@ model Organization {
   bookingTypes       BookingType[]
   bookingFlags       BookingFlag[]
   stripeAccount      StripeAccount?
+  emailDomains       EmailDomain[]
+  emailLogs          EmailLog[]
+  emailTemplates     EmailTemplate[]
+  emailCampaigns     EmailCampaign[]
+  emailContacts      EmailContact[]
+  notificationPrefs  NotificationPreference[]
+  smsLogs            SmsLog[]
+  smsTemplates       SmsTemplate[]
 
   @@index([industry])
 }
@@ -237,6 +245,7 @@ model Client {
   contacts       Contact[]
   callRecords    CallRecord[]
   bookings       Booking[]
+  emailContacts  EmailContact[]
 
   @@index([organizationId])
   @@index([status])
@@ -1185,4 +1194,368 @@ model ActivityLog {
   @@index([organizationId])
   @@index([userId])
   @@index([createdAt])
+}
+
+// ============================================================================
+// EMAIL SYSTEM (Resend Integration)
+// ============================================================================
+
+enum EmailDomainStatus {
+  PENDING         // Domain added, DNS records not yet configured
+  VERIFYING       // DNS records added, verification in progress
+  VERIFIED        // Domain fully verified and ready to send
+  FAILED          // Verification failed
+}
+
+enum EmailLogStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  COMPLAINED
+  FAILED
+}
+
+enum EmailType {
+  TRANSACTIONAL    // System-generated: invoices, confirmations, assignments
+  MARKETING        // Campaign emails: newsletters, promotions
+  NOTIFICATION     // Event-driven: new booking, payment received
+  REMINDER         // Scheduled: annual service reminders, follow-ups
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+}
+
+// Verified sending domains per organization
+model EmailDomain {
+  id               String            @id @default(cuid())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  domain           String            // e.g., "notifications.clientbusiness.com"
+  resendDomainId   String?           // Resend's domain ID for API calls
+  status           EmailDomainStatus @default(PENDING)
+  region           String            @default("us-east-1")
+
+  // DNS records returned by Resend (stored for UI display)
+  dnsRecords       Json?             // Array of {record, name, type, value, status}
+
+  // Sender defaults for this domain
+  defaultFromName  String?           // e.g., "Acme Plumbing"
+  defaultFromEmail String?           // e.g., "noreply@notifications.clientbusiness.com"
+  defaultReplyTo   String?           // e.g., "support@clientbusiness.com"
+
+  verifiedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([organizationId, domain])
+  @@index([organizationId])
+  @@index([status])
+}
+
+// Every email sent through the platform
+model EmailLog {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  resendEmailId    String?         // Resend's email ID for tracking
+  type             EmailType
+  status           EmailLogStatus  @default(QUEUED)
+
+  // Sender / recipient
+  fromAddress      String
+  toAddresses      Json            // string[] — can be multiple recipients
+  ccAddresses      Json?           // string[]
+  bccAddresses     Json?           // string[]
+  replyTo          String?
+
+  // Content
+  subject          String
+  templateId       String?         // Link to EmailTemplate if used
+  template         EmailTemplate?  @relation(fields: [templateId], references: [id])
+  campaignId       String?         // Link to EmailCampaign if part of one
+  campaign         EmailCampaign?  @relation(fields: [campaignId], references: [id])
+
+  // Context — what triggered this email
+  triggerEvent     String?         // e.g., "invoice.created", "booking.confirmed"
+  entityType       String?         // e.g., "Invoice", "Booking", "WorkOrder"
+  entityId         String?         // ID of the related entity
+
+  // Delivery tracking
+  sentAt           DateTime?
+  deliveredAt      DateTime?
+  openedAt         DateTime?
+  clickedAt        DateTime?
+  bouncedAt        DateTime?
+  bounceType       String?         // "Permanent" | "Transient"
+  bounceMessage    String?
+  complainedAt     DateTime?
+
+  // Tags for filtering
+  tags             Json?           // {key: value} pairs
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@index([type])
+  @@index([status])
+  @@index([resendEmailId])
+  @@index([triggerEvent])
+  @@index([createdAt])
+}
+
+// Reusable email templates (React Email components stored as config)
+model EmailTemplate {
+  id               String          @id @default(cuid())
+  organizationId   String?
+  organization     Organization?   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name             String          // e.g., "Invoice Email", "Booking Confirmation"
+  slug             String          // e.g., "invoice", "booking-confirmation"
+  description      String?
+  type             EmailType
+
+  // Template content
+  subject          String          // Default subject (can use {{variables}})
+  bodyHtml         String?         // Raw HTML fallback
+  bodyText         String?         // Plain text fallback
+  variables        Json?           // Available variables: [{name, description, required}]
+
+  // System templates have null organizationId (shared across all orgs)
+  isSystem         Boolean         @default(false)
+  isActive         Boolean         @default(true)
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  emailLogs        EmailLog[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@index([type])
+  @@index([slug])
+}
+
+// Marketing campaigns (email, SMS, or both)
+model EmailCampaign {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name             String
+  subject          String?         // Email subject (null for SMS-only)
+  fromName         String?
+  fromEmail        String?
+  replyTo          String?
+
+  // Channel
+  channel          CampaignChannel @default(EMAIL) // EMAIL, SMS, or BOTH
+
+  // Content — email
+  bodyHtml         String?         // Composed HTML content for email
+  emailTemplateId  String?         // Or use an email template
+
+  // Content — SMS
+  smsBody          String?         // SMS text body (max ~1600 chars)
+  smsTemplateId    String?         // Or use an SMS template
+
+  // Audience targeting
+  audienceFilter   Json?           // Filter criteria: {status, tags, clientType, ...}
+  recipientCount   Int             @default(0)
+
+  // Scheduling
+  status           CampaignStatus  @default(DRAFT)
+  scheduledAt      DateTime?       // When to send (null = send immediately)
+  sentAt           DateTime?
+  completedAt      DateTime?
+
+  // Stats — Email (updated via webhooks)
+  totalSent        Int             @default(0)
+  totalDelivered   Int             @default(0)
+  totalOpened      Int             @default(0)
+  totalClicked     Int             @default(0)
+  totalBounced     Int             @default(0)
+  totalComplaints  Int             @default(0)
+
+  // Stats — SMS
+  totalSmsSent     Int             @default(0)
+  totalSmsDelivered Int            @default(0)
+  totalSmsFailed   Int             @default(0)
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  emailLogs        EmailLog[]
+  smsLogs          SmsLog[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([channel])
+}
+
+// Email contacts / audience management
+model EmailContact {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  email            String
+  firstName        String?
+  lastName         String?
+  phone            String?
+
+  // Linked to CRM client if applicable
+  clientId         String?
+  client           Client?         @relation(fields: [clientId], references: [id])
+
+  // Subscription status
+  isSubscribed     Boolean         @default(true)
+  unsubscribedAt   DateTime?
+  unsubscribeReason String?
+
+  // Segmentation tags
+  tags             Json?           // string[] for audience segmentation
+  metadata         Json?           // Custom properties for personalization
+
+  // Resend contact ID (synced to Resend Audiences)
+  resendContactId  String?
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@index([clientId])
+  @@index([isSubscribed])
+}
+
+// Per-org notification preferences (which events trigger messages)
+model NotificationPreference {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Event type (matches triggerEvent in EmailLog/SmsLog)
+  event            String          // e.g., "invoice.created", "booking.confirmed"
+  description      String?         // Human-readable: "Send notification when a new invoice is created"
+
+  // Toggle + channel
+  isEnabled        Boolean         @default(true)
+  sendEmail        Boolean         @default(true)   // Send via email
+  sendSms          Boolean         @default(false)  // Send via SMS
+  sendToClient     Boolean         @default(true)   // Send to the client/customer
+  sendToAdmin      Boolean         @default(false)  // CC to org admin
+  sendToAssignee   Boolean         @default(false)  // Send to assigned employee
+
+  // Template overrides
+  emailTemplateId  String?         // Custom email template for this event
+  smsTemplateId    String?         // Custom SMS template for this event
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([organizationId, event])
+  @@index([organizationId])
+}
+
+// ============================================================================
+// SMS SYSTEM (Twilio Integration)
+// ============================================================================
+
+enum SmsLogStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  UNDELIVERED
+  FAILED
+}
+
+enum CampaignChannel {
+  EMAIL
+  SMS
+  BOTH
+}
+
+// Every SMS sent through the platform
+model SmsLog {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  twilioMessageSid String?         // Twilio's message SID for tracking
+  status           SmsLogStatus    @default(QUEUED)
+
+  // Sender / recipient
+  fromNumber       String          // Twilio phone number
+  toNumber         String          // Recipient phone number
+
+  // Content
+  body             String          // SMS body (max 1600 chars with segments)
+  segmentCount     Int             @default(1) // Number of SMS segments
+  templateId       String?         // Link to SmsTemplate if used
+  template         SmsTemplate?    @relation(fields: [templateId], references: [id])
+  campaignId       String?         // Link to EmailCampaign if part of multi-channel campaign
+  campaign         EmailCampaign?  @relation(fields: [campaignId], references: [id])
+
+  // Context — what triggered this SMS
+  triggerEvent     String?         // e.g., "booking.confirmed", "invoice.created"
+  entityType       String?         // e.g., "Booking", "Invoice"
+  entityId         String?
+
+  // Delivery tracking
+  sentAt           DateTime?
+  deliveredAt      DateTime?
+  errorCode        String?         // Twilio error code if failed
+  errorMessage     String?
+
+  // Cost tracking
+  priceCents       Int?            // Twilio price in cents
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([twilioMessageSid])
+  @@index([triggerEvent])
+  @@index([createdAt])
+}
+
+// Reusable SMS templates
+model SmsTemplate {
+  id               String          @id @default(cuid())
+  organizationId   String?
+  organization     Organization?   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name             String          // e.g., "Booking Confirmation SMS"
+  slug             String          // e.g., "booking-confirmation-sms"
+  description      String?
+
+  // Template content (supports {{variable}} placeholders)
+  body             String          // SMS body template
+  variables        Json?           // Available variables: [{name, description, required}]
+
+  // System templates have null organizationId
+  isSystem         Boolean         @default(false)
+  isActive         Boolean         @default(true)
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  smsLogs          SmsLog[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@index([slug])
 }

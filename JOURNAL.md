@@ -2265,3 +2265,108 @@ Continue Phase A (P0) from Feature Gap Analysis:
 - P0 Item #5: Work Order lifecycle (CRUD, status transitions, pipeline connections)
 
 ---
+
+## Session 23 — March 20, 2026
+
+### Context
+Josh identified Email and SMS messaging as a top-priority addition alongside the existing P0 roadmap. Resend (email API) and Twilio (SMS API, already installed for voice) were chosen as the delivery platforms. The goal: a unified notification + campaign system where orgs can send transactional messages (booking confirmations, invoice reminders, work order assignments) and marketing campaigns via email, SMS, or both — with per-event, per-channel controls.
+
+### Decisions Made
+- **Email delivery:** Resend ($20/mo for 50K emails). Single A1NT platform account, per-org sending domains (subdomains like `notifications.clientbusiness.com`).
+- **SMS delivery:** Twilio (already integrated for voice). Platform number `+16463321206`. SMS added as a channel alongside email, not a replacement.
+- **Unified campaigns:** The EmailCampaign model now supports `channel: EMAIL | SMS | BOTH`. One campaign can reach audience via email, text, or both simultaneously.
+- **Notification engine:** Central `triggerNotification()` dispatcher checks per-event preferences (`sendEmail`/`sendSms` booleans) and dispatches to the appropriate channel. SMS uses `{{variable}}` template interpolation.
+- **Sidebar renamed:** "Email & Campaigns" → "Campaigns & Messages" to reflect multi-channel capability.
+
+### Work Produced
+
+#### Prisma Schema (11 new enums, 9 new models)
+- `EmailDomain` — Per-org sending domains with DNS record tracking
+- `EmailLog` — Complete email delivery history with status tracking
+- `EmailTemplate` — Reusable email templates (React Email components)
+- `EmailCampaign` — Marketing campaigns with `channel` (EMAIL/SMS/BOTH), separate email + SMS stats
+- `EmailContact` — Audience management with CRM sync
+- `NotificationPreference` — Per-org, per-event config with `sendEmail`/`sendSms`/`sendToClient`/`sendToAdmin`/`sendToAssignee`
+- `SmsLog` — Full SMS delivery history with Twilio SID tracking, segment count, cost
+- `SmsTemplate` — Reusable SMS templates with `{{variable}}` interpolation
+- Enums: `EmailType`, `EmailStatus`, `CampaignStatus`, `SmsLogStatus`, `CampaignChannel`
+
+#### Email System (Resend) — 10 files
+- `src/lib/resend.ts` — Client singleton, domain CRUD, send email, batch send, audiences/contacts
+- `src/app/api/email/domains/route.ts` — Domain management (add, verify, list, delete)
+- `src/app/api/email/send/route.ts` — Send transactional/ad-hoc emails
+- `src/app/api/email/webhooks/route.ts` — Resend webhook handler (delivery/bounce/complaint tracking)
+- `src/app/api/email/campaigns/route.ts` — Campaign CRUD + send (email, SMS, or both)
+- `src/app/api/email/contacts/route.ts` — Contact management, CRM sync
+- `src/app/api/email/templates/route.ts` — Email template CRUD
+- `src/app/api/email/logs/route.ts` — Query email history with stats
+- `src/app/api/email/preferences/route.ts` — Notification preferences with `sendEmail`/`sendSms` fields
+
+#### React Email Templates — 7 branded templates
+- `src/emails/base-layout.tsx` — Shared layout (Inter font, branded wrapper)
+- `src/emails/invoice-email.tsx` — Invoice with line items, pay now button
+- `src/emails/booking-confirmation.tsx` — Booking details with reschedule/cancel
+- `src/emails/work-order-assigned.tsx` — WO assignment for technicians
+- `src/emails/payment-receipt.tsx` — Payment confirmation
+- `src/emails/welcome-email.tsx` — New client welcome
+- `src/emails/reminder-email.tsx` — Annual service, follow-up, appointment reminders
+- `src/emails/estimate-email.tsx` — Estimate/quote with approve button
+
+#### SMS System (Twilio) — 6 files
+- `src/lib/twilio-sms.ts` — Client singleton, sendSms, sendBulkSms, normalizePhoneNumber, calculateSegments, interpolateSmsTemplate
+- `src/lib/sms-templates.ts` — 9 system SMS templates (booking, reminder, invoice, overdue, WO assigned, WO complete, payment, estimate, welcome) + seed function
+- `src/app/api/sms/send/route.ts` — SMS send endpoint with logging
+- `src/app/api/sms/webhooks/route.ts` — Twilio delivery status callback (signature validation, campaign stat updates)
+- `src/app/api/sms/templates/route.ts` — SMS template CRUD
+- `src/app/api/sms/templates/seed/route.ts` — Seed system SMS templates
+
+#### Unified Notification Engine
+- `src/lib/notification-engine.ts` — Event-driven dispatcher supporting both email and SMS channels. Checks `sendEmail`/`sendSms` preferences per event, resolves email + phone recipients from entities, sends via Resend (email) and Twilio (SMS). Supports 10 event types: invoice.created, invoice.overdue, booking.confirmed, booking.reminder, workorder.assigned, workorder.completed, payment.received, estimate.sent, welcome.new_client, reminder.annual_service.
+
+#### Combined Message Log API
+- `src/app/api/messages/logs/route.ts` — Unified query endpoint that merges EmailLog + SmsLog entries, sorted by date, with channel-specific stats
+
+#### UI Components — 2 major pages
+- `src/components/email-settings.tsx` — Settings panel with domains section, DNS records, and notification preferences grid showing Email/SMS channel toggles + Client/Admin/Assignee recipient toggles per event
+- `src/app/dashboard/email/page.tsx` — "Campaigns & Messages" dashboard with 3 tabs:
+  - **Campaigns:** Create campaigns with channel selector (Email/SMS/Both), SMS character counter with segment calculation, email HTML editor. Campaign list shows per-channel stats.
+  - **Contacts:** Audience management with CRM sync, search, pagination
+  - **Message Log:** Unified email + SMS log with channel icons, combined stats cards (emails sent, opened, SMS sent, bounced/failed, total messages), channel and status filters
+
+#### Navigation Updates
+- Sidebar: "Email & Campaigns" → "Campaigns & Messages"
+- Breadcrumb: Updated route mapping
+
+### Environment Variables Required
+```
+RESEND_API_KEY=re_xxxxxxxxx            # Resend email delivery
+TWILIO_ACCOUNT_SID=ACxxxxxxxx          # Already set (voice)
+TWILIO_AUTH_TOKEN=xxxxxxxx             # Already set (voice)
+TWILIO_PHONE_NUMBER=+16463321206       # Already set (voice)
+```
+
+### Files Modified
+- `prisma/schema.prisma` — 9 new models, 5 new enums, updated NotificationPreference + EmailCampaign
+- `src/components/app-sidebar.tsx` — Nav item rename
+- `src/components/breadcrumb-nav.tsx` — Route label rename
+- `src/app/dashboard/settings/page.tsx` — Added Email/SMS section
+
+### Build Status
+- ✅ TypeScript compilation: PASS (zero type errors)
+- ✅ Prisma generate: PASS
+- ✅ Database sync: PASS (schema matches production Railway PostgreSQL)
+- ⚠ Full build: Stripe env var missing in sandbox (pre-existing, unrelated to this session)
+
+### Feature Gap Roadmap Progress
+- **P0 Item #1: Online Booking ✅ COMPLETE** (Session 21)
+- **P0 Item #2: Payment Processing ✅ COMPLETE** (Session 22)
+- **NEW — Email + SMS System ✅ COMPLETE** (Session 23)
+- Remaining P0 items: QuickBooks, Scheduling, Work Orders, CRM CRUD, Mobile Field View, Estimates
+
+### Up Next
+Continue Phase A (P0) from Feature Gap Analysis:
+- P0 Item #3: QuickBooks Online API sync
+- P0 Item #4: Scheduling CRUD (date nav, drag-and-drop, dispatch)
+- P0 Item #5: Work Order lifecycle
+
+---

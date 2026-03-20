@@ -10,6 +10,7 @@ const routeLabels: Record<string, string> = {
   "work-orders": "Work Orders",
   invoicing: "Invoicing",
   payments: "Payments",
+  email: "Campaigns & Messages",
   workforce: "Workforce",
   inventory: "Inventory",
   "ai-receptionist": "AI Receptionist",
