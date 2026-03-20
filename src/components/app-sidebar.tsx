@@ -29,6 +29,7 @@ import {
   ChevronsRight,
   GraduationCap,
   Layers,
+  Headset,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -159,6 +160,15 @@ const navSections: NavSection[] = [
         icon: Phone,
         notifications: "info",
         notificationCount: 7,
+      },
+      {
+        label: "Operator",
+        href: "/dashboard/operator",
+        icon: Headset,
+        quickLinks: [
+          { label: "Outbound Queue", href: "/dashboard/operator" },
+          { label: "Inbound Routing", href: "/dashboard/operator#inbound" },
+        ],
       },
       {
         label: "AI Agents",
