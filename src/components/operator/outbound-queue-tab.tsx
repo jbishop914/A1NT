@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Headset,
   CircleDot,
+  Loader2,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,10 +67,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 import {
-  sampleQueueStats,
   sampleAgentPool,
-  sampleLiveCalls,
-  sampleOutboundQueue,
   sampleCompletedCalls,
   campaignLabels,
   priorityLabels,
@@ -79,11 +77,23 @@ import type {
   CampaignType,
   CallPriority,
   OutboundCallStatus,
+  OutboundQueueItem,
+  LiveCall,
+  QueueStats,
+  AgentPoolEntry,
   SuggestedAction,
   ActionKicked,
   TranscriptTurn,
   CompletedCallDetail,
 } from "@/types/operator";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface QueueApiResponse {
+  queue: OutboundQueueItem[];
+  stats: QueueStats;
+  live: LiveCall[];
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -175,17 +185,48 @@ function CampaignBadge({ type }: { type: CampaignType }) {
   );
 }
 
+// ─── Skeleton helpers ─────────────────────────────────────────────────────────
+
+function SkeletonBox({ className }: { className?: string }) {
+  return (
+    <div className={`animate-pulse rounded bg-zinc-800 ${className ?? ""}`} />
+  );
+}
+
 // ─── 1. KPI Strip ─────────────────────────────────────────────────────────────
 
-function KpiStrip() {
-  const stats = sampleQueueStats;
+interface KpiStripProps {
+  stats: QueueStats | null;
+  loading: boolean;
+}
 
+function KpiStrip({ stats, loading }: KpiStripProps) {
+  const successRate = stats?.successRate ?? 0;
   const successColor =
-    stats.successRate >= 85
+    successRate >= 85
       ? "text-emerald-400"
-      : stats.successRate >= 70
+      : successRate >= 70
       ? "text-amber-400"
       : "text-rose-400";
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-4 gap-3" data-testid="kpi-strip">
+        {[...Array(4)].map((_, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3"
+          >
+            <SkeletonBox className="size-2 shrink-0 rounded-full" />
+            <div className="flex flex-col gap-1.5">
+              <SkeletonBox className="h-3 w-16" />
+              <SkeletonBox className="h-6 w-8" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-4 gap-3" data-testid="kpi-strip">
@@ -194,7 +235,7 @@ function KpiStrip() {
         <div className="flex size-2 shrink-0 rounded-full bg-zinc-400" />
         <div>
           <p className="text-xs text-zinc-500">Queued</p>
-          <p className="text-xl font-semibold text-zinc-100">{stats.totalQueued}</p>
+          <p className="text-xl font-semibold text-zinc-100">{stats?.totalQueued ?? 0}</p>
         </div>
       </div>
 
@@ -203,7 +244,7 @@ function KpiStrip() {
         <div className="flex size-2 shrink-0 animate-pulse rounded-full bg-emerald-400" />
         <div>
           <p className="text-xs text-zinc-500">In Progress</p>
-          <p className="text-xl font-semibold text-zinc-100">{stats.inProgress}</p>
+          <p className="text-xl font-semibold text-zinc-100">{stats?.inProgress ?? 0}</p>
         </div>
       </div>
 
@@ -212,7 +253,7 @@ function KpiStrip() {
         <CircleDot className="size-4 shrink-0 text-zinc-500" />
         <div>
           <p className="text-xs text-zinc-500">Completed Today</p>
-          <p className="text-xl font-semibold text-zinc-100">{stats.completedToday}</p>
+          <p className="text-xl font-semibold text-zinc-100">{stats?.completedToday ?? 0}</p>
         </div>
       </div>
 
@@ -221,7 +262,7 @@ function KpiStrip() {
         <CircleDot className={`size-4 shrink-0 ${successColor}`} />
         <div>
           <p className="text-xs text-zinc-500">Success Rate</p>
-          <p className={`text-xl font-semibold ${successColor}`}>{stats.successRate}%</p>
+          <p className={`text-xl font-semibold ${successColor}`}>{successRate}%</p>
         </div>
       </div>
     </div>
@@ -237,7 +278,21 @@ const agentStatusDot: Record<string, string> = {
   offline: "bg-zinc-700",
 };
 
-function AgentPoolStrip() {
+interface AgentPoolStripProps {
+  liveCalls: LiveCall[];
+}
+
+function AgentPoolStrip({ liveCalls }: AgentPoolStripProps) {
+  // Use the sample agent pool (configuration data), but override status based on live calls
+  const liveCallAgentNames = new Set(liveCalls.map((c) => c.agentName));
+  const agents: AgentPoolEntry[] = sampleAgentPool.map((agent) => ({
+    ...agent,
+    status: liveCallAgentNames.has(agent.name.split(" ")[0])
+      ? ("on-call" as const)
+      : ("idle" as const),
+    currentCallId: null,
+  }));
+
   return (
     <div
       className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2.5"
@@ -245,7 +300,7 @@ function AgentPoolStrip() {
     >
       <span className="mr-1 text-xs font-medium text-zinc-500">Agents</span>
       <div className="flex flex-1 items-center gap-2 overflow-x-auto">
-        {sampleAgentPool.map((agent) => (
+        {agents.map((agent) => (
           <div
             key={agent.id}
             className="flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1"
@@ -285,16 +340,88 @@ const campaignTypes: CampaignType[] = [
   "custom",
 ];
 
-function QuickDialSheet() {
+interface QuickDialSheetProps {
+  onSuccess: () => void;
+}
+
+function QuickDialSheet({ onSuccess }: QuickDialSheetProps) {
+  const [open, setOpen] = React.useState(false);
   const [contactName, setContactName] = React.useState("");
   const [phone, setPhone] = React.useState("");
   const [campaign, setCampaign] = React.useState<CampaignType>("appointment-confirm");
   const [agentId, setAgentId] = React.useState<string>("unassigned");
   const [priority, setPriority] = React.useState<CallPriority>("normal");
   const [notes, setNotes] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
+  const [feedback, setFeedback] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  function resetForm() {
+    setContactName("");
+    setPhone("");
+    setCampaign("appointment-confirm");
+    setAgentId("unassigned");
+    setPriority("normal");
+    setNotes("");
+    setFeedback(null);
+  }
+
+  async function handleSubmit(dialNow: boolean) {
+    if (!contactName.trim() || !phone.trim()) {
+      setFeedback({ type: "error", message: "Contact name and phone number are required." });
+      return;
+    }
+
+    setSubmitting(true);
+    setFeedback(null);
+
+    // Resolve agent name from pool
+    const selectedAgent = sampleAgentPool.find((a) => a.id === agentId);
+
+    try {
+      const res = await fetch("/api/operator/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactName: contactName.trim(),
+          contactPhone: phone.trim(),
+          campaignType: campaign,
+          assignedAgentId: agentId === "unassigned" ? null : agentId,
+          assignedAgentName: selectedAgent ? selectedAgent.name : null,
+          priority,
+          notes: notes.trim(),
+          dialNow,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        setFeedback({ type: "error", message: data.error ?? "Failed to submit. Please try again." });
+        return;
+      }
+
+      setFeedback({
+        type: "success",
+        message: dialNow
+          ? `Calling ${contactName}…`
+          : `${contactName} added to queue.`,
+      });
+
+      // Brief success flash, then close and refresh
+      setTimeout(() => {
+        setOpen(false);
+        resetForm();
+        onSuccess();
+      }, 1200);
+    } catch {
+      setFeedback({ type: "error", message: "Network error. Please try again." });
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
       <SheetTrigger
         render={
           <Button className="gap-2" data-testid="new-call-btn">
@@ -312,6 +439,20 @@ function QuickDialSheet() {
         </SheetHeader>
 
         <div className="flex flex-col gap-4 overflow-y-auto px-4 py-4">
+          {/* Feedback banner */}
+          {feedback && (
+            <div
+              className={`rounded-lg px-3 py-2.5 text-xs font-medium ${
+                feedback.type === "success"
+                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                  : "bg-rose-500/10 border border-rose-500/20 text-rose-400"
+              }`}
+              data-testid="qdial-feedback"
+            >
+              {feedback.message}
+            </div>
+          )}
+
           {/* Contact Name */}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="qdial-contact" className="text-xs text-zinc-400">
@@ -324,6 +465,7 @@ function QuickDialSheet() {
               onChange={(e) => setContactName(e.target.value)}
               className="bg-zinc-900 border-zinc-800 text-zinc-100 placeholder:text-zinc-600"
               data-testid="qdial-contact-input"
+              disabled={submitting}
             />
           </div>
 
@@ -339,6 +481,7 @@ function QuickDialSheet() {
               onChange={(e) => setPhone(e.target.value)}
               className="bg-zinc-900 border-zinc-800 text-zinc-100 placeholder:text-zinc-600"
               data-testid="qdial-phone-input"
+              disabled={submitting}
             />
           </div>
 
@@ -436,7 +579,8 @@ function QuickDialSheet() {
               placeholder="Any context for the agent..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full resize-none rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-600 focus:outline-none"
+              disabled={submitting}
+              className="w-full resize-none rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-600 focus:outline-none disabled:opacity-60"
               data-testid="qdial-notes-textarea"
             />
           </div>
@@ -447,11 +591,22 @@ function QuickDialSheet() {
             variant="outline"
             className="flex-1 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
             data-testid="qdial-add-queue-btn"
+            onClick={() => handleSubmit(false)}
+            disabled={submitting}
           >
-            Add to Queue
+            {submitting ? <Loader2 className="size-4 animate-spin" /> : "Add to Queue"}
           </Button>
-          <Button className="flex-1 gap-2" data-testid="qdial-dial-now-btn">
-            <Phone className="size-4" />
+          <Button
+            className="flex-1 gap-2"
+            data-testid="qdial-dial-now-btn"
+            onClick={() => handleSubmit(true)}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Phone className="size-4" />
+            )}
             Dial Now
           </Button>
         </SheetFooter>
@@ -464,14 +619,21 @@ function QuickDialSheet() {
 
 type QueueFilter = "all" | OutboundCallStatus;
 
-function QueueTable() {
+interface QueueTableProps {
+  queue: OutboundQueueItem[];
+  loading: boolean;
+  onCancel: (id: string) => Promise<void>;
+  onStart: (id: string) => Promise<void>;
+}
+
+function QueueTable({ queue, loading, onCancel, onStart }: QueueTableProps) {
   const [filter, setFilter] = React.useState<QueueFilter>("all");
   const [sortPriority, setSortPriority] = React.useState<"asc" | "desc" | null>(null);
 
   const priorityOrder: Record<CallPriority, number> = { urgent: 0, high: 1, normal: 2 };
 
   const filtered = React.useMemo(() => {
-    let items = [...sampleOutboundQueue];
+    let items = [...queue];
     if (filter !== "all") {
       items = items.filter((i) => i.status === filter);
     }
@@ -482,7 +644,7 @@ function QueueTable() {
       });
     }
     return items;
-  }, [filter, sortPriority]);
+  }, [queue, filter, sortPriority]);
 
   const filterTabs: { key: QueueFilter; label: string }[] = [
     { key: "all", label: "All" },
@@ -551,10 +713,28 @@ function QueueTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.length === 0 ? (
+            {loading ? (
+              // Skeleton rows while loading
+              [...Array(3)].map((_, i) => (
+                <TableRow key={i} className="border-zinc-800/60">
+                  {[...Array(8)].map((_, j) => (
+                    <TableCell key={j} className="py-3">
+                      <SkeletonBox className="h-4 w-full" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-sm text-zinc-600">
-                  No items match the selected filter.
+                <TableCell colSpan={8} className="py-12 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <Phone className="size-8 text-zinc-700" />
+                    <p className="text-sm font-medium text-zinc-500">
+                      {filter === "all"
+                        ? "No calls in queue — Use 'New Call' to get started"
+                        : `No ${filter} calls`}
+                    </p>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (
@@ -632,6 +812,8 @@ function QueueTable() {
                                   size="icon"
                                   className="size-7 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-400/10"
                                   data-testid={`play-btn-${item.id}`}
+                                  onClick={() => onStart(item.id)}
+                                  disabled={item.status === "in-progress" || item.status === "completed"}
                                 />
                               }
                             >
@@ -664,6 +846,7 @@ function QueueTable() {
                                   size="icon"
                                   className="size-7 text-zinc-400 hover:text-rose-400 hover:bg-rose-400/10"
                                   data-testid={`cancel-btn-${item.id}`}
+                                  onClick={() => onCancel(item.id)}
                                 />
                               }
                             >
@@ -687,33 +870,64 @@ function QueueTable() {
 
 // ─── 5. Live Calls Monitor ────────────────────────────────────────────────────
 
-function LiveCallsMonitor() {
-  const [durations, setDurations] = React.useState<Record<string, number>>(() =>
-    Object.fromEntries(sampleLiveCalls.map((c) => [c.id, c.duration]))
-  );
+interface LiveCallsMonitorProps {
+  liveCalls: LiveCall[];
+  loading: boolean;
+}
+
+function LiveCallsMonitor({ liveCalls, loading }: LiveCallsMonitorProps) {
+  // Tick live durations from the startedAt timestamps (not mock timers)
+  const [tick, setTick] = React.useState(0);
 
   React.useEffect(() => {
-    const interval = setInterval(() => {
-      setDurations((prev) =>
-        Object.fromEntries(Object.entries(prev).map(([id, d]) => [id, d + 1]))
-      );
-    }, 1000);
+    if (liveCalls.length === 0) return;
+    const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [liveCalls.length]);
 
-  if (sampleLiveCalls.length === 0) return null;
+  function getLiveDuration(call: LiveCall): number {
+    return Math.floor((Date.now() - new Date(call.startedAt).getTime()) / 1000);
+  }
+
+  if (loading) {
+    return (
+      <div data-testid="live-calls-monitor">
+        <div className="mb-2 flex items-center gap-2">
+          <div className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
+          <h3 className="text-sm font-medium text-zinc-200">Live Calls</h3>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+            <SkeletonBox className="h-20 w-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (liveCalls.length === 0) {
+    return (
+      <div data-testid="live-calls-monitor">
+        <div className="mb-2 flex items-center gap-2">
+          <div className="size-1.5 rounded-full bg-zinc-700" />
+          <h3 className="text-sm font-medium text-zinc-400">Live Calls</h3>
+          <span className="text-xs text-zinc-600">No active calls</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="live-calls-monitor">
       <div className="mb-2 flex items-center gap-2">
         <div className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
         <h3 className="text-sm font-medium text-zinc-200">Live Calls</h3>
-        <span className="text-xs text-zinc-500">({sampleLiveCalls.length} active)</span>
+        <span className="text-xs text-zinc-500">({liveCalls.length} active)</span>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {sampleLiveCalls.map((call) => {
-          const duration = durations[call.id] ?? call.duration;
+        {liveCalls.map((call) => {
+          const duration = getLiveDuration(call);
           const recentLines = call.liveTranscript.slice(-3);
 
           return (
@@ -753,20 +967,24 @@ function LiveCallsMonitor() {
                 className="mb-3 flex max-h-24 flex-col gap-1.5 overflow-y-auto rounded-md bg-zinc-950/50 p-2"
                 data-testid={`live-transcript-${call.id}`}
               >
-                {recentLines.map((turn, i) => (
-                  <div key={i} className="flex gap-1.5">
-                    <span
-                      className={`shrink-0 text-[10px] font-medium uppercase tabular-nums ${
-                        turn.role === "agent" ? "text-blue-400" : "text-zinc-400"
-                      }`}
-                    >
-                      {turn.role === "agent" ? "AGT" : "CTX"}
-                    </span>
-                    <p className="text-xs leading-relaxed text-zinc-400 line-clamp-2">
-                      {turn.text}
-                    </p>
-                  </div>
-                ))}
+                {recentLines.length > 0 ? (
+                  recentLines.map((turn, i) => (
+                    <div key={i} className="flex gap-1.5">
+                      <span
+                        className={`shrink-0 text-[10px] font-medium uppercase tabular-nums ${
+                          turn.role === "agent" ? "text-blue-400" : "text-zinc-400"
+                        }`}
+                      >
+                        {turn.role === "agent" ? "AGT" : "CTX"}
+                      </span>
+                      <p className="text-xs leading-relaxed text-zinc-400 line-clamp-2">
+                        {turn.text}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[10px] text-zinc-600 italic">Live transcript not yet available</p>
+                )}
               </div>
 
               {/* Action buttons */}
@@ -1046,6 +1264,58 @@ function CompletedCallsSection() {
 // ─── Root Component ───────────────────────────────────────────────────────────
 
 export default function OutboundQueueTab() {
+  const [queue, setQueue] = React.useState<OutboundQueueItem[]>([]);
+  const [stats, setStats] = React.useState<QueueStats | null>(null);
+  const [liveCalls, setLiveCalls] = React.useState<LiveCall[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function fetchData() {
+    try {
+      const res = await fetch("/api/operator/queue");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: QueueApiResponse = await res.json();
+      setQueue(data.queue ?? []);
+      setStats(data.stats ?? null);
+      setLiveCalls(data.live ?? []);
+      setError(null);
+    } catch (err) {
+      console.error("[OutboundQueueTab] fetch error:", err);
+      setError("Failed to load queue data.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Initial fetch + 15-second polling
+  React.useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function handleCancel(id: string) {
+    try {
+      await fetch(`/api/operator/queue/${id}`, { method: "DELETE" });
+      await fetchData();
+    } catch (err) {
+      console.error("[OutboundQueueTab] cancel error:", err);
+    }
+  }
+
+  async function handleStart(id: string) {
+    try {
+      await fetch(`/api/operator/queue/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "in-progress" }),
+      });
+      await fetchData();
+    } catch (err) {
+      console.error("[OutboundQueueTab] start error:", err);
+    }
+  }
+
   return (
     <TooltipProvider>
       <div className="flex flex-col gap-5 p-4" data-testid="outbound-queue-tab">
@@ -1055,27 +1325,42 @@ export default function OutboundQueueTab() {
             <h2 className="text-base font-semibold text-zinc-100">Outbound Queue</h2>
             <p className="text-xs text-zinc-500">Manage scheduled and queued outbound calls</p>
           </div>
-          <QuickDialSheet />
+          <QuickDialSheet onSuccess={fetchData} />
         </div>
 
+        {/* Error banner */}
+        {error && (
+          <div className="flex items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/10 px-4 py-2.5 text-xs text-rose-400">
+            <AlertTriangle className="size-3.5 shrink-0" />
+            {error}
+          </div>
+        )}
+
         {/* KPI Strip */}
-        <KpiStrip />
+        <KpiStrip stats={stats} loading={loading} />
 
         {/* Agent Pool */}
-        <AgentPoolStrip />
+        <AgentPoolStrip liveCalls={liveCalls} />
 
         {/* Live Calls */}
-        <LiveCallsMonitor />
+        <LiveCallsMonitor liveCalls={liveCalls} loading={loading} />
 
         {/* Queue Table */}
         <div>
           <div className="mb-2 flex items-center gap-2">
             <h3 className="text-sm font-medium text-zinc-200">Call Queue</h3>
-            <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
-              {sampleOutboundQueue.length}
-            </span>
+            {!loading && (
+              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
+                {queue.length}
+              </span>
+            )}
           </div>
-          <QueueTable />
+          <QueueTable
+            queue={queue}
+            loading={loading}
+            onCancel={handleCancel}
+            onStart={handleStart}
+          />
         </div>
 
         {/* Completed Calls */}

@@ -98,16 +98,21 @@ model Organization {
   template      Template?    @relation(fields: [templateId], references: [id])
 
   // Relations
-  users          User[]
-  clients        Client[]
-  employees      Employee[]
-  invoices       Invoice[]
-  tasks          Task[]
-  workOrders     WorkOrder[]
-  scheduleEvents ScheduleEvent[]
-  modules        OrganizationModule[]
-  activityLogs   ActivityLog[]
-  callRecords    CallRecord[]
+  users              User[]
+  clients            Client[]
+  employees          Employee[]
+  invoices           Invoice[]
+  tasks              Task[]
+  workOrders         WorkOrder[]
+  scheduleEvents     ScheduleEvent[]
+  modules            OrganizationModule[]
+  activityLogs       ActivityLog[]
+  callRecords        CallRecord[]
+  outboundQueueItems OutboundQueueItem[]
+  routingRules       RoutingRule[]
+  routingOverrides   RoutingOverride[]
+  customRoutingRules CustomRoutingRule[]
+  routingSchedule    RoutingScheduleBlock[]
 
   @@index([industry])
 }
@@ -629,6 +634,205 @@ model CallRecord {
   @@index([startedAt])
   @@index([callerNumber])
   @@index([intent])
+}
+
+// ============================================================================
+// ACTIVITY LOG (Audit Trail)
+// ============================================================================
+
+// ============================================================================
+// OPERATOR MODULE — Outbound Queue
+// ============================================================================
+
+enum OutboundQueueStatus {
+  QUEUED
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum OutboundCampaignType {
+  APPOINTMENT_CONFIRM
+  APPOINTMENT_RESCHEDULE
+  PRE_SERVICE_INFO
+  POST_SERVICE_FOLLOWUP
+  INVOICE_FOLLOWUP
+  SEASONAL_PROMO
+  SALES_PROSPECTING
+  CUSTOM
+}
+
+enum OutboundCallPriority {
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum OutboundCallOutcome {
+  ANSWERED
+  VOICEMAIL
+  NO_ANSWER
+  BUSY
+  DECLINED
+  WRONG_NUMBER
+}
+
+model OutboundQueueItem {
+  id                String                @id @default(cuid())
+  organizationId    String
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Contact info
+  contactName       String
+  contactPhone      String
+
+  // Campaign config
+  campaignType      OutboundCampaignType
+  assignedAgentId   String?
+  assignedAgentName String?
+  notes             String                @default("")
+  contextData       Json?                 // Campaign-specific context for the AI agent
+
+  // Status tracking
+  status            OutboundQueueStatus   @default(QUEUED)
+  priority          OutboundCallPriority  @default(NORMAL)
+  outcome           OutboundCallOutcome?
+
+  // Scheduling
+  scheduledTime     DateTime?
+  queuedAt          DateTime              @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  duration          Int?                  // seconds
+
+  // Retry management
+  retryCount        Int                   @default(0)
+  maxRetries        Int                   @default(3)
+
+  // Link to actual call record (created when call starts)
+  callRecordId      String?               @unique
+
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([priority])
+  @@index([scheduledTime])
+}
+
+// ============================================================================
+// OPERATOR MODULE — Inbound Routing
+// ============================================================================
+
+enum RoutingMode {
+  NORMAL
+  OVERRIDE
+  EMERGENCY
+}
+
+enum RoutingDestinationType {
+  AI_RECEPTIONIST
+  AI_RECEPTIONIST_LIMITED
+  HUMAN
+  VOICEMAIL
+  IVR_MENU
+  EMERGENCY_ONLY
+  FORWARD_CELL
+  FORWARD_EMPLOYEE
+}
+
+model RoutingRule {
+  id                  String                @id @default(cuid())
+  organizationId      String
+  organization        Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name                String
+  intent              String                // Maps to CallIntent
+  businessHoursRoute  String
+  afterHoursRoute     String
+  priority            String                @default("normal") // low, normal, high, urgent
+  enabled             Boolean               @default(true)
+  sortOrder           Int                   @default(0)
+
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([organizationId])
+}
+
+model RoutingOverride {
+  id                String                @id @default(cuid())
+  organizationId    String
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  active            Boolean               @default(false)
+  mode              RoutingMode           @default(NORMAL)
+  destination       RoutingDestinationType @default(AI_RECEPTIONIST)
+  forwardToNumber   String?
+  forwardToName     String?
+  reason            String                @default("")
+  activatedAt       DateTime?
+  expiresAt         DateTime?
+  activatedBy       String                @default("")
+
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@index([organizationId])
+}
+
+model CustomRoutingRule {
+  id                String                @id @default(cuid())
+  organizationId    String
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  type              String                // "area-code", "specific-number", "caller-id"
+  match             String                // The area code or phone number to match
+  destination       RoutingDestinationType
+  forwardTo         String?
+  voicemailMessage  String?
+  expiresAt         DateTime?
+  enabled           Boolean               @default(true)
+  note              String                @default("")
+
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@index([organizationId])
+}
+
+enum DayOfWeek {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
+model RoutingScheduleBlock {
+  id                String                @id @default(cuid())
+  organizationId    String
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  day               DayOfWeek
+  startHour         Int                   // 0-23
+  endHour           Int                   // 0-23
+  destination       RoutingDestinationType
+  label             String
+  agentScript       String?
+  forwardToNumber   String?
+  forwardToName     String?
+
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@index([organizationId])
+  @@index([day])
 }
 
 // ============================================================================

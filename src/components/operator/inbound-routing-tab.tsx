@@ -58,19 +58,23 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import {
-  sampleOverride,
-  sampleRoutingRules,
-  sampleCustomRules,
-  sampleScheduleBlocks,
-} from "@/data/sample-operator";
 import type {
   RoutingRule,
   CustomRoutingRule,
   ScheduleBlock,
+  RoutingOverride,
   RoutingDestination,
   DayOfWeek,
 } from "@/types/operator";
+
+// ─── API Response type ────────────────────────────────────────────────────────
+
+interface RoutingConfig {
+  rules: RoutingRule[];
+  override: RoutingOverride;
+  customRules: CustomRoutingRule[];
+  schedule: ScheduleBlock[];
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -101,6 +105,16 @@ function useCountdown(expiresAt: string | null): string {
     return () => clearInterval(id);
   }, [expiresAt]);
   return label;
+}
+
+// ─── Skeleton helpers ─────────────────────────────────────────────────────────
+
+function SkeletonLine({ className }: { className?: string }) {
+  return (
+    <div
+      className={`animate-pulse rounded bg-zinc-800/70 ${className ?? "h-4 w-full"}`}
+    />
+  );
 }
 
 // ─── Intent Icon ─────────────────────────────────────────────────────────────
@@ -180,21 +194,69 @@ type OverrideAction = "cell" | "employee" | "emergency" | null;
 interface ConfigStripProps {
   action: OverrideAction;
   onCancel: () => void;
+  onActivate: (payload: {
+    mode: string;
+    destination: string;
+    forwardToNumber: string | null;
+    forwardToName: string | null;
+    reason: string;
+    durationMinutes: number | null;
+  }) => Promise<void>;
 }
 
-function ConfigStrip({ action, onCancel }: ConfigStripProps) {
+function ConfigStrip({ action, onCancel, onActivate }: ConfigStripProps) {
   const [duration, setDuration] = React.useState("1hr");
   const [phone, setPhone] = React.useState(
     action === "cell" ? "+12039155211" : ""
   );
+  const [saving, setSaving] = React.useState(false);
 
-  const handleActivate = () => {
-    console.log("[InboundRouting] Activating override", {
-      action,
-      duration,
-      phone,
-    });
-    onCancel();
+  const handleActivate = async () => {
+    const durationMap: Record<string, number | null> = {
+      "1hr": 60,
+      "2hr": 120,
+      "4hr": 240,
+      "8hr": 480,
+      cancel: null,
+    };
+
+    const durationMinutes = durationMap[duration] ?? 60;
+
+    let mode = "override";
+    let destination = "forward-cell";
+    let forwardToNumber: string | null = null;
+    let forwardToName: string | null = null;
+    let reason = "";
+
+    if (action === "cell") {
+      destination = "forward-cell";
+      forwardToNumber = phone || "+12039155211";
+      forwardToName = "Josh Bishop";
+      reason = "Diverted all calls to cell";
+    } else if (action === "employee") {
+      destination = "forward-employee";
+      forwardToNumber = phone || null;
+      forwardToName = null;
+      reason = "Diverted all calls to employee";
+    } else if (action === "emergency") {
+      mode = "emergency";
+      destination = "emergency-only";
+      reason = "Emergency override — calls restricted";
+    }
+
+    setSaving(true);
+    try {
+      await onActivate({
+        mode,
+        destination,
+        forwardToNumber,
+        forwardToName,
+        reason,
+        durationMinutes,
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -247,9 +309,10 @@ function ConfigStrip({ action, onCancel }: ConfigStripProps) {
           size="sm"
           className="h-7 bg-zinc-100 text-zinc-900 text-xs hover:bg-white"
           onClick={handleActivate}
+          disabled={saving}
         >
           <CheckCircle2 className="size-3" />
-          Activate
+          {saving ? "Activating…" : "Activate"}
         </Button>
         <Button
           data-testid="override-cancel-btn"
@@ -257,6 +320,7 @@ function ConfigStrip({ action, onCancel }: ConfigStripProps) {
           variant="ghost"
           className="h-7 text-xs text-zinc-500 hover:text-zinc-300"
           onClick={onCancel}
+          disabled={saving}
         >
           <XCircle className="size-3" />
           Cancel
@@ -266,17 +330,75 @@ function ConfigStrip({ action, onCancel }: ConfigStripProps) {
   );
 }
 
-function RoutingStatusBanner() {
+interface RoutingStatusBannerProps {
+  override: RoutingOverride;
+  loading: boolean;
+  onRefetch: () => void;
+}
+
+function RoutingStatusBanner({
+  override,
+  loading,
+  onRefetch,
+}: RoutingStatusBannerProps) {
   const [activeAction, setActiveAction] = React.useState<OverrideAction>(null);
-  const countdown = useCountdown(sampleOverride.expiresAt);
-  const isActive = sampleOverride.active;
+  const [deactivating, setDeactivating] = React.useState(false);
+  const countdown = useCountdown(override.expiresAt);
+  const isActive = override.active;
 
   const handleActionClick = (action: OverrideAction) => {
-    if (action === "employee") {
-      console.log("[InboundRouting] Employee selector would open");
-    }
     setActiveAction((prev) => (prev === action ? null : action));
   };
+
+  const handleActivate = async (payload: {
+    mode: string;
+    destination: string;
+    forwardToNumber: string | null;
+    forwardToName: string | null;
+    reason: string;
+    durationMinutes: number | null;
+  }) => {
+    await fetch("/api/operator/routing", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: true, ...payload }),
+    });
+    setActiveAction(null);
+    onRefetch();
+  };
+
+  const handleDeactivate = async () => {
+    setDeactivating(true);
+    try {
+      await fetch("/api/operator/routing", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: false }),
+      });
+      onRefetch();
+    } finally {
+      setDeactivating(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div data-testid="routing-status-section" className="space-y-3">
+        <div className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3">
+          <SkeletonLine className="mt-1 size-2 shrink-0 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <SkeletonLine className="h-4 w-48" />
+            <SkeletonLine className="h-3 w-72" />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <SkeletonLine className="h-7 w-36 rounded-md" />
+          <SkeletonLine className="h-7 w-40 rounded-md" />
+          <SkeletonLine className="h-7 w-36 rounded-md" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="routing-status-section" className="space-y-3">
@@ -298,17 +420,36 @@ function RoutingStatusBanner() {
         />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-zinc-100">
-            {isActive ? sampleOverride.reason : "Normal Routing Active"}
+            {isActive ? override.reason : "Normal Routing Active"}
           </p>
           <p className="mt-0.5 text-xs text-zinc-500">
             {isActive
-              ? `Override by ${sampleOverride.activatedBy} · ${countdown}`
+              ? `Override by ${override.activatedBy} · ${countdown}`
               : "All calls routing per intent rules and weekly schedule"}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5 text-xs text-zinc-500">
-          <Clock className="size-3.5" />
-          {isActive ? countdown : "Schedule-based"}
+          {isActive ? (
+            <>
+              <Clock className="size-3.5" />
+              {countdown}
+              <Button
+                data-testid="override-deactivate-btn"
+                size="sm"
+                variant="ghost"
+                className="ml-2 h-6 px-2 text-[11px] text-zinc-500 hover:text-rose-400"
+                onClick={handleDeactivate}
+                disabled={deactivating}
+              >
+                {deactivating ? "Deactivating…" : "Deactivate"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Clock className="size-3.5" />
+              Schedule-based
+            </>
+          )}
         </div>
       </div>
 
@@ -369,6 +510,7 @@ function RoutingStatusBanner() {
           <ConfigStrip
             action={activeAction}
             onCancel={() => setActiveAction(null)}
+            onActivate={handleActivate}
           />
         )}
       </div>
@@ -378,13 +520,35 @@ function RoutingStatusBanner() {
 
 // ─── Section 2: Intent-Based Routing Rules Table ─────────────────────────────
 
-function RoutingRulesTable() {
-  const [rules, setRules] = React.useState<RoutingRule[]>(sampleRoutingRules);
+interface RoutingRulesTableProps {
+  rules: RoutingRule[];
+  loading: boolean;
+  onRulesChange: (updater: (prev: RoutingRule[]) => RoutingRule[]) => void;
+}
 
-  const toggleRule = (id: string) => {
-    setRules((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r))
+function RoutingRulesTable({
+  rules,
+  loading,
+  onRulesChange,
+}: RoutingRulesTableProps) {
+  const toggleRule = async (id: string, newEnabled: boolean) => {
+    // Optimistic update
+    onRulesChange((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, enabled: newEnabled } : r))
     );
+
+    try {
+      await fetch("/api/operator/routing/rules", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, enabled: newEnabled }),
+      });
+    } catch {
+      // Revert on failure
+      onRulesChange((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, enabled: !newEnabled } : r))
+      );
+    }
   };
 
   return (
@@ -400,85 +564,114 @@ function RoutingRulesTable() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-zinc-800">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-zinc-800 hover:bg-transparent">
-              <TableHead className="h-8 pl-4 text-xs text-zinc-500 font-medium">
-                Intent
-              </TableHead>
-              <TableHead className="h-8 text-xs text-zinc-500 font-medium">
-                Business Hours
-              </TableHead>
-              <TableHead className="h-8 text-xs text-zinc-500 font-medium">
-                After Hours
-              </TableHead>
-              <TableHead className="h-8 text-xs text-zinc-500 font-medium">
-                Priority
-              </TableHead>
-              <TableHead className="h-8 text-xs text-zinc-500 font-medium">
-                Status
-              </TableHead>
-              <TableHead className="h-8 pr-4 text-xs text-zinc-500 font-medium">
-                {/* Edit */}
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rules.map((rule) => (
-              <TableRow
-                key={rule.id}
-                data-testid={`routing-rule-row-${rule.id}`}
-                className="border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/40"
+      {loading ? (
+        <div className="overflow-hidden rounded-lg border border-zinc-800">
+          <div className="space-y-px">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-4 border-b border-zinc-800 bg-zinc-900/50 px-4 py-3"
               >
-                <TableCell className="py-2.5 pl-4">
-                  <div className="flex items-center gap-2">
-                    <IntentIcon intent={rule.intent} />
-                    <span
-                      className={`text-sm font-medium ${
-                        rule.enabled ? "text-zinc-100" : "text-zinc-500"
-                      }`}
-                    >
-                      {rule.name}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell className="py-2.5 max-w-[220px]">
-                  <span className="text-xs text-zinc-400 leading-snug">
-                    {rule.businessHoursRoute}
-                  </span>
-                </TableCell>
-                <TableCell className="py-2.5 max-w-[220px]">
-                  <span className="text-xs text-zinc-500 leading-snug">
-                    {rule.afterHoursRoute}
-                  </span>
-                </TableCell>
-                <TableCell className="py-2.5">
-                  <PriorityBadge priority={rule.priority} />
-                </TableCell>
-                <TableCell className="py-2.5">
-                  <Switch
-                    data-testid={`routing-rule-toggle-${rule.id}`}
-                    size="sm"
-                    checked={rule.enabled}
-                    onCheckedChange={() => toggleRule(rule.id)}
-                  />
-                </TableCell>
-                <TableCell className="py-2.5 pr-4">
-                  <Button
-                    data-testid={`routing-rule-edit-${rule.id}`}
-                    size="icon-sm"
-                    variant="ghost"
-                    className="text-zinc-600 hover:text-zinc-300"
-                  >
-                    <Edit2 className="size-3.5" />
-                  </Button>
-                </TableCell>
-              </TableRow>
+                <SkeletonLine className="h-4 w-32" />
+                <SkeletonLine className="h-3 w-48" />
+                <SkeletonLine className="h-3 w-40" />
+                <SkeletonLine className="h-5 w-12 rounded" />
+                <SkeletonLine className="h-5 w-8 rounded-full" />
+              </div>
             ))}
-          </TableBody>
-        </Table>
-      </div>
+          </div>
+        </div>
+      ) : rules.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-zinc-800 bg-zinc-900/30 px-6 py-8 text-center">
+          <MessageCircle className="mx-auto mb-2 size-5 text-zinc-700" />
+          <p className="text-sm text-zinc-600">No routing rules configured</p>
+          <p className="text-xs text-zinc-700">
+            Routing rules will appear here once they are set up
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-zinc-800">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-zinc-800 hover:bg-transparent">
+                <TableHead className="h-8 pl-4 text-xs text-zinc-500 font-medium">
+                  Intent
+                </TableHead>
+                <TableHead className="h-8 text-xs text-zinc-500 font-medium">
+                  Business Hours
+                </TableHead>
+                <TableHead className="h-8 text-xs text-zinc-500 font-medium">
+                  After Hours
+                </TableHead>
+                <TableHead className="h-8 text-xs text-zinc-500 font-medium">
+                  Priority
+                </TableHead>
+                <TableHead className="h-8 text-xs text-zinc-500 font-medium">
+                  Status
+                </TableHead>
+                <TableHead className="h-8 pr-4 text-xs text-zinc-500 font-medium">
+                  {/* Edit */}
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rules.map((rule) => (
+                <TableRow
+                  key={rule.id}
+                  data-testid={`routing-rule-row-${rule.id}`}
+                  className="border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/40"
+                >
+                  <TableCell className="py-2.5 pl-4">
+                    <div className="flex items-center gap-2">
+                      <IntentIcon intent={rule.intent} />
+                      <span
+                        className={`text-sm font-medium ${
+                          rule.enabled ? "text-zinc-100" : "text-zinc-500"
+                        }`}
+                      >
+                        {rule.name}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-2.5 max-w-[220px]">
+                    <span className="text-xs text-zinc-400 leading-snug">
+                      {rule.businessHoursRoute}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-2.5 max-w-[220px]">
+                    <span className="text-xs text-zinc-500 leading-snug">
+                      {rule.afterHoursRoute}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-2.5">
+                    <PriorityBadge priority={rule.priority} />
+                  </TableCell>
+                  <TableCell className="py-2.5">
+                    <Switch
+                      data-testid={`routing-rule-toggle-${rule.id}`}
+                      size="sm"
+                      checked={rule.enabled}
+                      onCheckedChange={(checked) =>
+                        toggleRule(rule.id, checked)
+                      }
+                    />
+                  </TableCell>
+                  <TableCell className="py-2.5 pr-4">
+                    <Button
+                      data-testid={`routing-rule-edit-${rule.id}`}
+                      size="icon-sm"
+                      variant="ghost"
+                      className="text-zinc-600 hover:text-zinc-300"
+                    >
+                      <Edit2 className="size-3.5" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }
@@ -606,26 +799,64 @@ function getMatchLabel(type: CustomRoutingRule["type"]): string {
   }
 }
 
-function CustomRoutingRules() {
-  const [rules, setRules] = React.useState<CustomRoutingRule[]>(sampleCustomRules);
+interface CustomRoutingRulesProps {
+  rules: CustomRoutingRule[];
+  loading: boolean;
+  onRulesChange: (
+    updater: (prev: CustomRoutingRule[]) => CustomRoutingRule[]
+  ) => void;
+  onRefetch: () => void;
+}
+
+function CustomRoutingRules({
+  rules,
+  loading,
+  onRulesChange,
+  onRefetch,
+}: CustomRoutingRulesProps) {
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [form, setForm] = React.useState<AddRuleFormState>(DEFAULT_FORM);
+  const [saving, setSaving] = React.useState(false);
 
   const needsForwardTo =
     form.destination === "forward-cell" || form.destination === "forward-employee";
   const needsVoicemail = form.destination === "voicemail";
 
-  const handleToggle = (id: string) => {
-    setRules((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r))
+  const handleToggle = async (id: string, newEnabled: boolean) => {
+    // Optimistic update
+    onRulesChange((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, enabled: newEnabled } : r))
     );
+
+    try {
+      await fetch("/api/operator/routing/custom", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, enabled: newEnabled }),
+      });
+    } catch {
+      // Revert on failure
+      onRulesChange((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, enabled: !newEnabled } : r))
+      );
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setRules((prev) => prev.filter((r) => r.id !== id));
+  const handleDelete = async (id: string) => {
+    // Optimistic update
+    onRulesChange((prev) => prev.filter((r) => r.id !== id));
+
+    try {
+      await fetch(`/api/operator/routing/custom?id=${id}`, {
+        method: "DELETE",
+      });
+    } catch {
+      // Refetch to restore on failure
+      onRefetch();
+    }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const expiresAt: string | null = (() => {
       const hoursMap: Record<string, number> = {
         "1h": 1,
@@ -637,21 +868,27 @@ function CustomRoutingRules() {
       return h ? new Date(Date.now() + h * 3600000).toISOString() : null;
     })();
 
-    const newRule: CustomRoutingRule = {
-      id: `cr-${Date.now()}`,
-      type: form.type,
-      match: form.match,
-      destination: form.destination,
-      forwardTo: form.forwardTo || null,
-      voicemailMessage: form.voicemailMessage || null,
-      expiresAt,
-      enabled: true,
-      note: form.note,
-    };
-
-    setRules((prev) => [...prev, newRule]);
-    setForm(DEFAULT_FORM);
-    setSheetOpen(false);
+    setSaving(true);
+    try {
+      await fetch("/api/operator/routing/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: form.type,
+          match: form.match,
+          destination: form.destination,
+          forwardTo: form.forwardTo || null,
+          voicemailMessage: form.voicemailMessage || null,
+          expiresAt,
+          note: form.note,
+        }),
+      });
+      setForm(DEFAULT_FORM);
+      setSheetOpen(false);
+      onRefetch();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -851,9 +1088,9 @@ function CustomRoutingRules() {
                 size="sm"
                 className="bg-zinc-100 text-zinc-900 hover:bg-white"
                 onClick={handleSave}
-                disabled={!form.match}
+                disabled={!form.match || saving}
               >
-                Save Rule
+                {saving ? "Saving…" : "Save Rule"}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -861,12 +1098,28 @@ function CustomRoutingRules() {
       </div>
 
       {/* Rule cards */}
-      {rules.length === 0 ? (
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-start justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3"
+            >
+              <div className="flex-1 space-y-2">
+                <SkeletonLine className="h-5 w-40" />
+                <SkeletonLine className="h-3 w-64" />
+                <SkeletonLine className="h-3 w-32" />
+              </div>
+              <SkeletonLine className="h-5 w-8 rounded-full" />
+            </div>
+          ))}
+        </div>
+      ) : rules.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-800 bg-zinc-900/30 px-6 py-8 text-center">
           <Hash className="mx-auto mb-2 size-5 text-zinc-700" />
-          <p className="text-sm text-zinc-600">No custom rules configured</p>
+          <p className="text-sm text-zinc-600">No custom routing rules</p>
           <p className="text-xs text-zinc-700">
-            Add a rule to override routing for specific numbers or area codes
+            Add one to get started
           </p>
         </div>
       ) : (
@@ -875,7 +1128,7 @@ function CustomRoutingRules() {
             <CustomRuleCard
               key={rule.id}
               rule={rule}
-              onToggle={() => handleToggle(rule.id)}
+              onToggle={() => handleToggle(rule.id, !rule.enabled)}
               onDelete={() => handleDelete(rule.id)}
             />
           ))}
@@ -962,7 +1215,12 @@ function ScheduleBlockSegment({
   );
 }
 
-function ScheduleGrid() {
+interface ScheduleGridProps {
+  schedule: ScheduleBlock[];
+  loading: boolean;
+}
+
+function ScheduleGrid({ schedule, loading }: ScheduleGridProps) {
   const blocksByDay = React.useMemo(() => {
     const map: Record<DayOfWeek, ScheduleBlock[]> = {
       mon: [],
@@ -973,11 +1231,11 @@ function ScheduleGrid() {
       sat: [],
       sun: [],
     };
-    sampleScheduleBlocks.forEach((b) => {
+    schedule.forEach((b) => {
       map[b.day].push(b);
     });
     return map;
-  }, []);
+  }, [schedule]);
 
   return (
     <div data-testid="schedule-routing-section" className="space-y-3">
@@ -1002,99 +1260,155 @@ function ScheduleGrid() {
         </Button>
       </div>
 
-      {/* Grid */}
-      <div className="overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900/50">
-        {/* Hour labels */}
-        <div className="px-2 pt-2 pb-0">
-          <div className="flex" style={{ marginLeft: "48px" }}>
-            {HOUR_LABELS.map((h) => (
-              <div
-                key={h}
-                className="text-[10px] text-zinc-600 select-none"
-                style={{
-                  width: `${(3 / TOTAL_HOURS) * 100}%`,
-                  minWidth: "28px",
-                }}
-              >
-                {formatHour(h)}
+      {loading ? (
+        <div className="overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-2">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <SkeletonLine className="h-3 w-8 shrink-0" />
+              <SkeletonLine className="h-6 flex-1 rounded-sm" />
+            </div>
+          ))}
+        </div>
+      ) : schedule.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-zinc-800 bg-zinc-900/30 px-6 py-8 text-center">
+          <Calendar className="mx-auto mb-2 size-5 text-zinc-700" />
+          <p className="text-sm text-zinc-600">No schedule configured</p>
+          <p className="text-xs text-zinc-700">
+            Defaults to AI Receptionist 24/7
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Grid */}
+          <div className="overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900/50">
+            {/* Hour labels */}
+            <div className="px-2 pt-2 pb-0">
+              <div className="flex" style={{ marginLeft: "48px" }}>
+                {HOUR_LABELS.map((h) => (
+                  <div
+                    key={h}
+                    className="text-[10px] text-zinc-600 select-none"
+                    style={{
+                      width: `${(3 / TOTAL_HOURS) * 100}%`,
+                      minWidth: "28px",
+                    }}
+                  >
+                    {formatHour(h)}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Day rows */}
+            <div className="px-2 pb-2 space-y-1">
+              {DAYS.map((day) => {
+                const blocks = blocksByDay[day];
+                return (
+                  <div
+                    key={day}
+                    data-testid={`schedule-row-${day}`}
+                    className="flex items-center gap-2"
+                  >
+                    {/* Day label */}
+                    <div className="w-10 shrink-0 text-right text-[11px] font-medium text-zinc-500">
+                      {DAY_LABELS[day]}
+                    </div>
+
+                    {/* Track */}
+                    <div className="relative h-6 flex-1 rounded-sm bg-zinc-800/60">
+                      {blocks.map((block) =>
+                        getBlockSegments(block).map((seg) => (
+                          <ScheduleBlockSegment
+                            key={`${block.id}-${seg.start}`}
+                            block={block}
+                            start={seg.start}
+                            end={seg.end}
+                          />
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Hour tick marks (bottom axis) */}
+            <div className="border-t border-zinc-800/50 px-2 pb-2 pt-1">
+              <div className="flex" style={{ marginLeft: "48px" }}>
+                {Array.from({ length: 25 }, (_, i) => i).map((h) => (
+                  <div
+                    key={h}
+                    className={`flex-shrink-0 h-1.5 border-l ${
+                      h % 3 === 0 ? "border-zinc-700" : "border-zinc-800"
+                    }`}
+                    style={{ width: `${(1 / TOTAL_HOURS) * 100}%`, minWidth: "3.5px" }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {(Object.keys(destinationLabels) as RoutingDestination[]).map((dest) => (
+              <div key={dest} className="flex items-center gap-1.5">
+                <div
+                  className={`size-2.5 rounded-sm ${destinationColors[dest]}`}
+                />
+                <span className="text-[11px] text-zinc-500">
+                  {destinationLabels[dest]}
+                </span>
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Day rows */}
-        <div className="px-2 pb-2 space-y-1">
-          {DAYS.map((day) => {
-            const blocks = blocksByDay[day];
-            return (
-              <div
-                key={day}
-                data-testid={`schedule-row-${day}`}
-                className="flex items-center gap-2"
-              >
-                {/* Day label */}
-                <div className="w-10 shrink-0 text-right text-[11px] font-medium text-zinc-500">
-                  {DAY_LABELS[day]}
-                </div>
-
-                {/* Track */}
-                <div className="relative h-6 flex-1 rounded-sm bg-zinc-800/60">
-                  {blocks.map((block) =>
-                    getBlockSegments(block).map((seg) => (
-                      <ScheduleBlockSegment
-                        key={`${block.id}-${seg.start}`}
-                        block={block}
-                        start={seg.start}
-                        end={seg.end}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Hour tick marks (bottom axis) */}
-        <div className="border-t border-zinc-800/50 px-2 pb-2 pt-1">
-          <div className="flex" style={{ marginLeft: "48px" }}>
-            {Array.from({ length: 25 }, (_, i) => i).map((h) => (
-              <div
-                key={h}
-                className={`flex-shrink-0 h-1.5 border-l ${
-                  h % 3 === 0 ? "border-zinc-700" : "border-zinc-800"
-                }`}
-                style={{ width: `${(1 / TOTAL_HOURS) * 100}%`, minWidth: "3.5px" }}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-x-4 gap-y-2">
-        {(Object.keys(destinationLabels) as RoutingDestination[]).map((dest) => (
-          <div key={dest} className="flex items-center gap-1.5">
-            <div
-              className={`size-2.5 rounded-sm ${destinationColors[dest]}`}
-            />
-            <span className="text-[11px] text-zinc-500">
-              {destinationLabels[dest]}
-            </span>
-          </div>
-        ))}
-      </div>
+        </>
+      )}
     </div>
   );
 }
 
-// ─── Textarea (missing from shadcn, create inline) ───────────────────────────
-// NOTE: Textarea is referenced from @/components/ui/textarea but the file may
-// not exist. Provide a fallback inline if needed.
-
 // ─── Root Component ───────────────────────────────────────────────────────────
 
+const EMPTY_OVERRIDE: RoutingOverride = {
+  id: "",
+  active: false,
+  mode: "normal",
+  destination: "ai-receptionist",
+  forwardToNumber: null,
+  forwardToName: null,
+  reason: "",
+  activatedAt: null,
+  expiresAt: null,
+  activatedBy: "",
+};
+
 export default function InboundRoutingTab() {
+  const [loading, setLoading] = React.useState(true);
+  const [override, setOverride] = React.useState<RoutingOverride>(EMPTY_OVERRIDE);
+  const [rules, setRules] = React.useState<RoutingRule[]>([]);
+  const [customRules, setCustomRules] = React.useState<CustomRoutingRule[]>([]);
+  const [schedule, setSchedule] = React.useState<ScheduleBlock[]>([]);
+
+  const fetchConfig = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/operator/routing");
+      if (!res.ok) return;
+      const data: RoutingConfig = await res.json();
+      setOverride(data.override);
+      setRules(data.rules);
+      setCustomRules(data.customRules);
+      setSchedule(data.schedule);
+    } catch (err) {
+      console.error("[InboundRoutingTab] fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchConfig();
+  }, [fetchConfig]);
+
   return (
     <div
       data-testid="inbound-routing-tab"
@@ -1108,28 +1422,41 @@ export default function InboundRoutingTab() {
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <RoutingStatusBanner />
+          <RoutingStatusBanner
+            override={override}
+            loading={loading}
+            onRefetch={fetchConfig}
+          />
         </CardContent>
       </Card>
 
       {/* Section 2 */}
       <Card className="border-zinc-800 bg-zinc-950 shadow-none">
         <CardContent className="pt-4">
-          <RoutingRulesTable />
+          <RoutingRulesTable
+            rules={rules}
+            loading={loading}
+            onRulesChange={setRules}
+          />
         </CardContent>
       </Card>
 
       {/* Section 3 */}
       <Card className="border-zinc-800 bg-zinc-950 shadow-none">
         <CardContent className="pt-4">
-          <CustomRoutingRules />
+          <CustomRoutingRules
+            rules={customRules}
+            loading={loading}
+            onRulesChange={setCustomRules}
+            onRefetch={fetchConfig}
+          />
         </CardContent>
       </Card>
 
       {/* Section 4 */}
       <Card className="border-zinc-800 bg-zinc-950 shadow-none">
         <CardContent className="pt-4">
-          <ScheduleGrid />
+          <ScheduleGrid schedule={schedule} loading={loading} />
         </CardContent>
       </Card>
     </div>
