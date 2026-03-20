@@ -150,35 +150,36 @@ export function handleMediaStream(
         const systemPrompt =
           config?.systemPrompt ?? buildDefaultPrompt(session?.callerNumber ?? "unknown");
 
-        // OpenAI Realtime API session.update — nested structure matching
-        // Twilio's official integration guide (audio/pcmu = µ-law, no transcoding)
+        // OpenAI Realtime API session.update — FLAT structure per official API reference:
+        // https://platform.openai.com/docs/api-reference/realtime-client-events/session/update
+        // g711_ulaw = µ-law = Twilio's native format (no transcoding)
         const sessionUpdate = {
           type: "session.update",
           session: {
-            type: "realtime",
-            model,
-            output_modalities: ["audio"],
-            audio: {
-              input: {
-                format: { type: "audio/pcmu" },
-                turn_detection: {
-                  type: "server_vad",
-                  prefix_padding_ms: 300,
-                  silence_duration_ms: 500,
-                },
-              },
-              output: {
-                format: { type: "audio/pcmu" },
-                voice,
-              },
+            modalities: ["text", "audio"],
+            voice,
+            input_audio_format: "g711_ulaw",
+            output_audio_format: "g711_ulaw",
+            input_audio_transcription: { model: "whisper-1" },
+            turn_detection: {
+              type: "server_vad" as const,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 500,
             },
             instructions: systemPrompt,
-            tools,
+            tools: tools.map((t) => ({
+              type: "function" as const,
+              function: {
+                name: t.name,
+                description: t.description,
+                parameters: t.parameters,
+              },
+            })),
             temperature,
           },
         };
 
-        console.log("[Voice] Sending session.update to OpenAI");
+        console.log("[Voice] Sending session.update to OpenAI:", JSON.stringify(sessionUpdate, null, 2));
         openaiWs!.send(JSON.stringify(sessionUpdate));
       }, 250);
     });
@@ -200,7 +201,14 @@ export function handleMediaStream(
             break;
 
           case "session.updated":
-            console.log("[Voice] Session configured successfully");
+            console.log("[Voice] Session configured successfully:", JSON.stringify({
+              modalities: event.session?.modalities,
+              voice: event.session?.voice,
+              input_audio_format: event.session?.input_audio_format,
+              output_audio_format: event.session?.output_audio_format,
+              turn_detection: event.session?.turn_detection?.type,
+              tools_count: event.session?.tools?.length,
+            }));
             if (session) session.status = "active";
 
             // Kick off the conversation — tell the AI to greet the caller.
@@ -219,6 +227,7 @@ export function handleMediaStream(
           /* ── Audio output from AI → send to Twilio ───────────────── */
           case "response.audio.delta":          // beta event name
           case "response.output_audio.delta":   // GA event name
+            console.log(`[Voice] Audio delta: type=${event.type}, size=${event.delta?.length ?? 0}, streamSid=${streamSid}`);
             if (event.delta && streamSid && twilioWs.readyState === WebSocket.OPEN) {
               const audioDelta = {
                 event: "media",
