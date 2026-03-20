@@ -1702,3 +1702,125 @@ Route optimization uses Mapbox's Optimization API (traveling salesman solver) to
 - Mobile-optimized technician view for routes
 
 ---
+
+## Session 19 — Operator Module (Phone System Nerve Center)
+**Date:** 2026-03-20
+**Commit:** `0c4506a` — feat: Operator module — outbound queue, inbound routing, IVR scaffold
+**Build:** 32 routes (up from 31)
+**Files Changed:** 7 new files + 1 modified, +3,300 lines
+
+### Overview
+Built the Operator module — the command center for the entire phone system. This consolidates outbound call queue management, inbound routing controls, and IVR configuration into a single page. Also fixed the Railway voice server healthcheck failure from Session 18 (commit `7917625`).
+
+### Railway Voice Server Fix (Pre-session)
+The voice server Docker build was succeeding but the healthcheck was failing because:
+1. `src/lib/db.ts` was not copied into the container (voice modules import it via `../db`)
+2. `prisma generate` was never run (needed for `@/generated/prisma/client` imports)
+3. `node:20-slim` doesn't include `curl` (needed for `HEALTHCHECK` command)
+4. `--omit=dev` was skipping the `prisma` CLI (a devDependency needed for generate)
+
+Fixed Dockerfile to install curl, run full `npm ci`, generate Prisma client, and copy `db.ts`.
+
+### Operator Page (`/dashboard/operator`)
+Three-tab layout:
+
+#### Tab 1: Outbound Queue (`outbound-queue-tab.tsx` — 1,086 lines)
+The outbound calling command center:
+
+**KPI Strip** — 4 compact stat cards: Queued, In Progress, Completed Today, Success Rate. Pulse indicators for active items.
+
+**Agent Pool Strip** — Horizontal pills showing each AI agent's status (on-call/idle/post-processing) with colored dots. "Scale Up" button for cloning agents to handle more calls.
+
+**Quick Dial Sheet** — Slide-out panel for creating new outbound calls:
+- Contact name, phone number, campaign type (8 types), agent assignment, priority, notes
+- "Add to Queue" (standard) vs "Dial Now" (admin override for immediate calls)
+
+**Queue Table** — Filterable table (All/Queued/Scheduled/In Progress) showing pending calls with campaign badges, priority indicators, agent assignments, and row-level actions (Play, Reassign, Cancel).
+
+**Live Call Monitor** — Cards with pulsing green borders showing active calls in progress. Displays real-time duration timer, agent name, campaign type, and a mini live transcript (last 3 turns). Transfer and Take Over buttons marked as Phase 2.
+
+**Completed Calls Review** — Expandable rows showing:
+- Full conversation transcript (agent/contact turns styled as chat bubbles)
+- AI-generated call summary and sentiment indicator
+- "Actions Taken" section (green checkmarks for work orders, appointments, leads created during the call)
+- "Suggested Actions" section (buttons for processes the agent didn't kick off but could: Create Work Order, Book Estimate, Add to Prospecting, Send to Tech, Queue Follow-up)
+
+**Sample scenarios include:**
+- Invoice follow-up resulting in 3-payment plan agreement (with suggested "Create Payment Plan" action)
+- Sales prospecting from neighbor at job site (warm lead, suggest follow-up + estimate)
+- Post-service follow-up that uncovered bathroom remodel upsell opportunity
+- Appointment confirmation with access notes captured
+- Seasonal promo voicemail left (suggest retry)
+
+#### Tab 2: Inbound Routing (`inbound-routing-tab.tsx` — 1,137 lines)
+Admin controls for how incoming calls are handled:
+
+**Routing Status Banner** — Shows current mode (Normal/Override/Emergency) with visual indicator. When an override is active, shows countdown timer to auto-revert.
+
+**Quick Override Buttons:**
+- "Divert All → My Cell" (pre-filled with Josh's number +12039155211)
+- "Divert All → Employee" (employee selector)
+- "Emergency Override" (red, high-priority)
+Each opens an inline config strip with duration selector (1hr, 2hr, 4hr, 8hr, Until Cancelled) and activate/cancel buttons.
+
+**Intent-Based Routing Rules** — Table with 6 intent types (Emergency, Service, Appointment, Billing, Sales, General), each with business hours and after-hours routing behavior, priority badges, and enable/disable toggles. Migrated from the receptionist page and enhanced.
+
+**Custom Routing Rules** — Card-based display with:
+- Area-code routing (e.g., 212 → Sam for NYC metro sales)
+- Specific number routing (e.g., inspector callback → forward to Josh's cell)
+- Per-rule expiration with countdown
+- "Add Rule" sheet with conditional fields (forward number shown for forwarding destinations, voicemail textarea shown for VM destinations)
+
+**Weekly Routing Schedule** — Visual 24hr × 7-day grid showing:
+- Color-coded blocks by destination type (emerald=AI full, amber=AI limited, rose=emergency-only, etc.)
+- Hover tooltips with schedule details and agent script previews
+- Handles overnight time blocks that wrap across midnight
+- Color legend for all 8 destination types
+
+**Sample schedule: TripleA Plumbing**
+- Mon-Fri 8am-5pm: Full AI Receptionist
+- Mon-Fri 5pm-9pm: Limited AI (messages only, no booking)
+- Mon-Fri 9pm-8am: Emergency only + voicemail
+- Sat 9am-2pm: Limited Saturday AI
+- Sunday: Emergency only all day
+
+#### Tab 3: IVR / Menus (Placeholder)
+Phase 2 scaffold with preview cards for: Menu Tree Builder, Keypad Assignments, Message Recording, Test & Preview.
+
+### Types & Data
+- `src/types/operator.ts` (192 lines) — Full type system: OutboundQueueItem, CompletedCallDetail, LiveCall, AgentPoolEntry, RoutingOverride, RoutingRule, CustomRoutingRule, ScheduleBlock, QueueStats
+- `src/data/sample-operator.ts` (507 lines) — Realistic demo data with 6 queued calls, 5 completed calls with full transcripts, 2 live calls, 4 agents, routing rules, custom rules, weekly schedule, and color/label maps
+
+### Sidebar
+Added "Operator" entry with Headset icon under Management group, positioned between AI Receptionist and AI Agents. Quick links: Outbound Queue, Inbound Routing.
+
+### Future Plans (Noted for Later Sessions)
+**Conference Call Coordinator** — Josh described a dedicated module (its own sidebar entry) for:
+- Setting up conference calls with external participants
+- Sending detail emails with call-in numbers
+- Handling reschedule requests with configurable rules
+- Auto-calling participants who don't connect on time
+- On-the-fly live conference creation from active calls
+- Company-wide emergency meetings with push notifications
+- Multi-department participant management
+
+**Operator Phase 2:**
+- Real-time transcript streaming via WebSocket
+- Hot-patch transfer/takeover using Twilio Conference API
+- IVR menu tree builder with visual editor
+- Call recording playback
+- Agent cloning / parallel processing backend
+- Wire routing rules to actual Twilio call routing
+
+### Files Changed
+| File | Lines | Description |
+|---|---|---|
+| `src/app/dashboard/operator/page.tsx` | +128 | Three-tab page scaffold |
+| `src/components/operator/outbound-queue-tab.tsx` | +1,086 | Full outbound queue UI |
+| `src/components/operator/inbound-routing-tab.tsx` | +1,137 | Full inbound routing UI |
+| `src/components/ui/textarea.tsx` | +17 | Textarea component (was missing) |
+| `src/types/operator.ts` | +192 | TypeScript types for operator domain |
+| `src/data/sample-operator.ts` | +507 | Demo data with realistic scenarios |
+| `src/components/app-sidebar.tsx` | +10 | Operator sidebar entry |
+
+---
