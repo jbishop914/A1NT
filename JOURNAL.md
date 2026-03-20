@@ -1824,3 +1824,65 @@ Added "Operator" entry with Headset icon under Management group, positioned betw
 | `src/components/app-sidebar.tsx` | +10 | Operator sidebar entry |
 
 ---
+
+## Session 19b — Wire Operator Module to Real DB + APIs
+**Date:** 2026-03-20
+**Commit:** `9d793fb` — feat: wire Operator module to real DB + APIs
+**Build:** 36 routes (5 new API endpoints)
+**Files Changed:** 9 files, +2,036 lines / -293 lines
+
+### Overview
+Wired the entire Operator module to real PostgreSQL data via 5 new API routes. Active/live areas (queue, live calls, KPIs, routing config) now fetch from the database — no fake data in active sections. Completed calls section retains sample data as historical reference. All mutations (queue items, routing overrides, rule toggles, custom rules) persist to DB.
+
+### Prisma Schema Additions
+7 new models added to the Operator domain:
+
+| Model | Purpose |
+|---|---|
+| `OutboundQueueItem` | Outbound call queue with status, campaign, agent, scheduling, retry tracking |
+| `RoutingRule` | Intent-based routing rules (Emergency, Service, Appointment, etc.) |
+| `RoutingOverride` | Active override state (divert to cell, emergency, etc.) with expiration |
+| `CustomRoutingRule` | Area-code, specific-number, and caller-ID routing |
+| `RoutingScheduleBlock` | Weekly time-block routing schedule |
+
+7 new enums: `OutboundQueueStatus`, `OutboundCampaignType`, `OutboundCallPriority`, `OutboundCallOutcome`, `RoutingMode`, `RoutingDestinationType`, `DayOfWeek`
+
+### API Routes
+
+| Route | Methods | Purpose |
+|---|---|---|
+| `/api/operator/queue` | GET, POST | Queue items + stats + live calls; Add/dial |
+| `/api/operator/queue/[id]` | PATCH, DELETE | Update/cancel queue items |
+| `/api/operator/routing` | GET, PUT | Full routing config; Override toggle |
+| `/api/operator/routing/rules` | PATCH | Toggle rule enabled/disabled |
+| `/api/operator/routing/custom` | POST, DELETE, PATCH | Create, delete, toggle custom rules |
+
+### Frontend Changes
+
+**Outbound Queue Tab:**
+- KPIs, queue table, live monitor now fetch from `GET /api/operator/queue` with 15s polling
+- Quick Dial sheet POSTs to API (both "Add to Queue" and "Dial Now")
+- Cancel/Start actions call PATCH/DELETE endpoints
+- Proper empty states: "No calls in queue" with call-to-action, "No active calls" for live monitor
+- Loading skeletons during fetch
+- Agent pool shows real status based on live calls (idle vs on-call)
+
+**Inbound Routing Tab:**
+- All data (rules, override, custom rules, schedule) fetched from `GET /api/operator/routing`
+- Override activation: PUT with mode, destination, forward number, duration (auto-expiry)
+- Override deactivation: PUT with `active: false`, refetch
+- Rule toggles: PATCH with optimistic updates + rollback on failure
+- Custom rules: Create (POST), Delete (DELETE), Toggle (PATCH) all wired
+- Schedule grid reads from DB-seeded blocks
+- Loading skeletons and empty states for all sections
+
+### Seed Data
+`prisma/seed-operator.mts` seeds:
+- 6 intent-based routing rules
+- 18 weekly schedule blocks (Mon-Fri business/after-hours/overnight, Sat limited, Sun emergency-only)
+- Default routing override (inactive)
+
+### Design Principle: No Fake Active Data
+Active/live areas show only real database data. Empty states guide the user to take action. Historical/completed data uses sample examples to demonstrate what completed calls look like.
+
+---
