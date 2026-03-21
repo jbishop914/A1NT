@@ -113,7 +113,24 @@ export async function GET() {
       agentsIdle: 0,
     };
 
-    // Get active outbound CallRecords for live monitor
+    // Get active outbound CallRecords for live monitor.
+    // Also auto-clean stale records: if a call has been "ACTIVE" for over
+    // 60 minutes, it almost certainly ended without a status callback.
+    const staleThreshold = new Date(Date.now() - 60 * 60 * 1000);
+
+    await db.callRecord.updateMany({
+      where: {
+        organizationId: orgId,
+        direction: "OUTBOUND",
+        status: "ACTIVE",
+        startedAt: { lt: staleThreshold },
+      },
+      data: {
+        status: "COMPLETED",
+        endedAt: new Date(),
+      },
+    });
+
     const liveCalls = await db.callRecord.findMany({
       where: {
         organizationId: orgId,
@@ -205,23 +222,11 @@ export async function POST(request: NextRequest) {
 
     // If dial now, initiate the call immediately
     if (dialNow) {
-      // Map campaign type for the voice system
-      const voiceCampaigns: CampaignType[] = [
-        "appointment-confirm",
-        "appointment-reschedule",
-        "pre-service-info",
-        "post-service-followup",
-        "invoice-followup",
-        "seasonal-promo",
-      ];
-
-      const voiceCampaign = voiceCampaigns.includes(campaignType as CampaignType)
-        ? (campaignType as CampaignType)
-        : ("post-service-followup" as CampaignType); // fallback
-
+      // All campaign types (including "custom" and "sales-prospecting") are now
+      // valid CampaignType values with proper prompt definitions.
       const result = await initiateOutboundCall({
         targetNumber: contactPhone,
-        campaignType: voiceCampaign,
+        campaignType: campaignType as CampaignType,
         recipientName: contactName,
         contextData: { ...contextData, notes, queueItemId: item.id },
         organizationId: orgId,

@@ -17,7 +17,9 @@ export type CampaignType =
   | "pre-service-info"
   | "post-service-followup"
   | "invoice-followup"
-  | "seasonal-promo";
+  | "seasonal-promo"
+  | "sales-prospecting"
+  | "custom";
 
 export interface CampaignContext {
   type: CampaignType;
@@ -295,6 +297,88 @@ You are calling ${ctx.recipientName} about an overdue invoice.
     },
   },
 
+  "sales-prospecting": {
+    label: "Sales Prospecting",
+    description: "Outreach to potential new clients or warm leads",
+    roleTitle: "Business Development Representative",
+    roleDepartment: "Sales",
+    capabilities: [
+      "Introduce services and value proposition",
+      "Identify customer needs and pain points",
+      "Book appointments or consultations for interested leads",
+      "Note interest level and follow-up preferences",
+    ],
+    constraints: [
+      "Never be pushy or aggressive — respect their time",
+      "If they say they're not interested, thank them and end gracefully",
+      "Do not provide pricing over the phone — offer a free consultation",
+      "Keep under 3 minutes unless the lead is clearly engaged",
+    ],
+    personalityTraits: ["Confident", "Genuinely helpful", "Not salesy", "Knowledgeable"],
+    voiceStyle: "Warm, professional, and conversational",
+    buildGreeting: (ctx) => {
+      return `Hi ${ctx.recipientName}, this is Alex from TripleA Plumbing. I'm reaching out because we serve businesses and homes in your area. Do you have a quick moment?`;
+    },
+    buildInstructions: (ctx) => {
+      const data = ctx.data as { notes?: string; source?: string };
+      return `
+## Outbound Call — Sales Prospecting
+You are calling ${ctx.recipientName} as a prospecting/outreach call.
+
+${data.notes ? `### Context Notes\n${data.notes}` : ""}
+${data.source ? `### Lead Source: ${data.source}` : ""}
+
+### Call Flow
+1. Introduce yourself and state you're reaching out to local customers
+2. Ask if they currently have a plumbing/HVAC service provider
+3. Briefly mention your key differentiators (24/7 emergency, licensed & insured, local)
+4. If interested: offer a free estimate or consultation, use check_schedule to book
+5. If not interested: thank them and move on gracefully
+6. Note the outcome for CRM follow-up
+`.trim();
+    },
+  },
+
+  "custom": {
+    label: "Custom Call",
+    description: "General-purpose outbound call with custom notes and context",
+    roleTitle: "Customer Relations Representative",
+    roleDepartment: "Operations",
+    capabilities: [
+      "Make general outbound calls based on custom instructions",
+      "Handle any type of customer interaction",
+      "Use all available tools as needed",
+      "Adapt tone and approach based on context",
+    ],
+    constraints: [
+      "Follow any specific instructions provided in the call notes",
+      "Be professional and courteous at all times",
+      "If unsure about something, offer to have someone follow up",
+    ],
+    personalityTraits: ["Adaptable", "Professional", "Attentive", "Helpful"],
+    voiceStyle: "Professional, friendly, and adaptable to the situation",
+    buildGreeting: (ctx) => {
+      return `Hi${ctx.recipientName ? ` ${ctx.recipientName}` : ""}, this is Alex from TripleA Plumbing. How are you doing today?`;
+    },
+    buildInstructions: (ctx) => {
+      const data = ctx.data as { notes?: string; queueItemId?: string };
+      return `
+## Outbound Call — Custom
+You are making a custom outbound call to ${ctx.recipientName}.
+
+${data.notes ? `### Operator Notes\n${data.notes}\n\nFollow these notes as your primary guide for this call.` : "### No specific notes provided\nHave a natural conversation. Ask how they're doing, if there's anything we can help with, and if they have any upcoming service needs."}
+
+### Call Flow
+1. Greet the customer warmly
+2. State the purpose of the call based on the notes above
+3. Handle the conversation naturally
+4. Use tools as needed (schedule, work orders, knowledge base)
+5. Wrap up with clear next steps
+6. Thank them for their time
+`.trim();
+    },
+  },
+
   "seasonal-promo": {
     label: "Seasonal Promotion",
     description: "Outreach for seasonal offers and promotions",
@@ -369,7 +453,7 @@ export function getAllCampaigns(): Array<{ type: CampaignType } & CampaignDefini
  * role, personality, and instructions.
  */
 export function buildOutboundPrompt(ctx: CampaignContext): string {
-  const campaign = CAMPAIGNS[ctx.type];
+  const campaign = CAMPAIGNS[ctx.type] ?? CAMPAIGNS["custom"];
   if (!campaign) throw new Error(`Unknown campaign type: ${ctx.type}`);
 
   const basePrompt = buildSystemPrompt({

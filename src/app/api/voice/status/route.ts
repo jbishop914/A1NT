@@ -45,14 +45,43 @@ export async function POST(request: NextRequest) {
       const dbStatus = STATUS_MAP[callStatus] ?? "COMPLETED";
       
       try {
-        const updatedRecord = await db.callRecord.update({
-          where: { callSid },
-          data: {
-            status: dbStatus,
-            endedAt: new Date(),
-            ...(duration ? { duration: parseInt(duration, 10) } : {}),
-          },
-        });
+        // Try updating by callSid first. If the record was created with a temp SID
+        // (pending-xxx) and the real SID was never written (e.g. call failed instantly),
+        // fall back to finding any ACTIVE outbound record matching the caller/callee.
+        let updatedRecord;
+        try {
+          updatedRecord = await db.callRecord.update({
+            where: { callSid },
+            data: {
+              status: dbStatus,
+              endedAt: new Date(),
+              ...(duration ? { duration: parseInt(duration, 10) } : {}),
+            },
+          });
+        } catch {
+          // callSid not found — try finding the record by the To number + ACTIVE status
+          const fallback = await db.callRecord.findFirst({
+            where: {
+              callerNumber: from,
+              direction: "OUTBOUND",
+              status: "ACTIVE",
+            },
+            orderBy: { startedAt: "desc" },
+          });
+          if (fallback) {
+            updatedRecord = await db.callRecord.update({
+              where: { id: fallback.id },
+              data: {
+                callSid, // Store the real SID
+                status: dbStatus,
+                endedAt: new Date(),
+                ...(duration ? { duration: parseInt(duration, 10) } : {}),
+              },
+            });
+            console.log(`[Voice] Fallback: matched ACTIVE record ${fallback.id} for callSid ${callSid}`);
+          }
+        }
+        if (!updatedRecord) throw new Error("No matching record found");
         console.log(`[Voice] Call record ${callSid} updated: status=${dbStatus}`);
 
         // Also update the linked OutboundQueueItem if this was an outbound call

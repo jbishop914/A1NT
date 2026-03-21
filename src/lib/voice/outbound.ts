@@ -53,6 +53,8 @@ const CAMPAIGN_INTENT_MAP: Record<CampaignType, string> = {
   "post-service-followup": "GENERAL",
   "invoice-followup": "BILLING",
   "seasonal-promo": "SALES_INQUIRY",
+  "sales-prospecting": "SALES_INQUIRY",
+  "custom": "GENERAL",
 };
 
 /* ─── Outbound Call Initiation ─────────────────────────────────────────── */
