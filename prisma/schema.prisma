@@ -132,6 +132,8 @@ model Organization {
   notificationPrefs  NotificationPreference[]
   smsLogs            SmsLog[]
   smsTemplates       SmsTemplate[]
+  messageThreads     MessageThread[]
+  assistantConfig    AssistantConfig?
 
   @@index([industry])
 }
@@ -292,6 +294,7 @@ model Employee {
   scheduleEvents ScheduleEvent[]
   bookingTypes   BookingType[]
   bookings       Booking[]
+  messageReadStatuses MessageReadStatus[]
 
   @@index([organizationId])
 }
@@ -834,6 +837,9 @@ model CallRecord {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
+  // Unified messages reverse relation
+  messageThreads  MessageThread[]
+
   @@index([organizationId])
   @@index([status])
   @@index([startedAt])
@@ -1306,6 +1312,9 @@ model EmailLog {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
+  // Unified messages reverse relation
+  messageThreads   MessageThread[]
+
   @@index([organizationId])
   @@index([type])
   @@index([status])
@@ -1525,6 +1534,9 @@ model SmsLog {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
+  // Unified messages reverse relation
+  messageThreads   MessageThread[]
+
   @@index([organizationId])
   @@index([status])
   @@index([twilioMessageSid])
@@ -1558,4 +1570,143 @@ model SmsTemplate {
   @@unique([organizationId, slug])
   @@index([organizationId])
   @@index([slug])
+}
+
+// ============================================================================
+// UNIFIED MESSAGES (Phase 1)
+// ============================================================================
+
+enum MessageChannel {
+  PHONE
+  SMS
+  EMAIL
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum ReadStatus {
+  UNREAD
+  READ
+  RESOLVED
+}
+
+enum DraftStatus {
+  PENDING
+  SENT
+  DISCARDED
+}
+
+enum AssistantMode {
+  DISABLED
+  SUGGEST
+  AUTO
+}
+
+model MessageThread {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Contact info (denormalized for fast display)
+  contactName      String
+  contactPhone     String?
+  contactEmail     String?
+
+  // Thread metadata
+  channel          MessageChannel  // Primary channel of this thread
+  subject          String?         // Email subject or call summary
+  preview          String?         // Last message preview text
+  lastMessageAt    DateTime        @default(now())
+  messageCount     Int             @default(0)
+
+  // Source linking (optional FK to the original record)
+  callRecordId     String?
+  callRecord       CallRecord?     @relation(fields: [callRecordId], references: [id])
+  smsLogId         String?
+  smsLog           SmsLog?         @relation(fields: [smsLogId], references: [id])
+  emailLogId       String?
+  emailLog         EmailLog?       @relation(fields: [emailLogId], references: [id])
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  // Relations
+  messages         ThreadMessage[]
+  readStatuses     MessageReadStatus[]
+  drafts           DraftResponse[]
+
+  @@index([organizationId])
+  @@index([lastMessageAt])
+  @@index([contactPhone])
+  @@index([contactEmail])
+  @@index([channel])
+}
+
+model ThreadMessage {
+  id               String            @id @default(cuid())
+  threadId         String
+  thread           MessageThread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  // Message content
+  channel          MessageChannel
+  direction        MessageDirection
+  body             String            // Message text or transcript
+  preview          String?           // Short preview (truncated body)
+  subject          String?           // Email subject if applicable
+
+  // Source linking
+  sourceId         String?           // ID of the original CallRecord / SmsLog / EmailLog
+  sourceType       String?           // "CallRecord" | "SmsLog" | "EmailLog"
+
+  // Voice-specific
+  hasVoicemail     Boolean           @default(false)
+  transcription    String?           // Voicemail transcription
+
+  createdAt        DateTime          @default(now())
+
+  @@index([threadId])
+  @@index([createdAt])
+}
+
+model MessageReadStatus {
+  id               String          @id @default(cuid())
+  threadId         String
+  thread           MessageThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  employeeId       String
+  employee         Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  status           ReadStatus      @default(UNREAD)
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([threadId, employeeId])
+  @@index([employeeId])
+  @@index([status])
+}
+
+model DraftResponse {
+  id               String          @id @default(cuid())
+  threadId         String
+  thread           MessageThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  channel          MessageChannel
+  body             String
+  status           DraftStatus     @default(PENDING)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([threadId])
+  @@index([status])
+}
+
+model AssistantConfig {
+  id               String          @id @default(cuid())
+  organizationId   String          @unique
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  mode             AssistantMode   @default(DISABLED)
+  autoReplyChannels MessageChannel[]
+  tone             String          @default("professional")
+  signatureTemplate String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 }
