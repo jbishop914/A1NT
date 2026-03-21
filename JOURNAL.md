@@ -2370,3 +2370,108 @@ Continue Phase A (P0) from Feature Gap Analysis:
 - P0 Item #5: Work Order lifecycle
 
 ---
+
+## Session 24 — March 21, 2026 (Operator Fixes + Unified Messages Phase 1)
+
+### Context
+Continuing from Session 23. Fixed multiple Operator bugs discovered during live testing, then built the Phase 1 Unified Messages system — a new core module that consolidates all customer communications into threaded conversations.
+
+### Bug Fixes
+
+#### 1. Vercel Build Failures
+- **Stripe SDK crash at build time:** `new Stripe()` initialized at module scope with empty key. Converted to lazy proxy pattern in `src/lib/stripe.ts`.
+- **Prisma client crash at build time:** Same issue in `src/lib/db.ts`. Converted to lazy proxy pattern.
+- Both clients now only initialize on first actual use, not during Next.js static analysis.
+
+#### 2. Separate SMS Number from Voice
+- Added `TWILIO_SMS_NUMBER` env var for toll-free outbound texts
+- Voice stays on `TWILIO_PHONE_NUMBER` (local 646 number)
+- Updated `src/lib/twilio-sms.ts` to use the new env var with fallback
+
+#### 3. Stuck Live Calls on Operator + AI Receptionist Pages
+- **Root cause:** `CallRecord` created with temp `callSid` (`pending-xxx`), but status webhook looked up by real SID — race condition when calls fail fast.
+- **Fix 1:** Status webhook (`/api/voice/status`) now falls back to matching by caller number + ACTIVE status when SID lookup fails.
+- **Fix 2:** Voice server now explicitly marks DB records as FAILED when session setup crashes (missing API key, prompt build failure, module load failure).
+- **Fix 3:** 4-hour safety net cleanup for truly orphaned records (generous threshold to never kill real calls).
+
+#### 4. "Application Error Goodbye" on Custom Outbound Calls
+- **Root cause:** `CampaignType` union didn't include `"custom"` or `"sales-prospecting"`. Voice server threw `Unknown campaign type: custom`, crashing the WebSocket before OpenAI could connect.
+- **Fix:** Added full `"custom"` and `"sales-prospecting"` campaign definitions with prompts, greetings, and call flows. `buildOutboundPrompt()` now falls back to `"custom"` for any unknown type. Removed restrictive whitelist in queue POST.
+
+### New Module: Unified Messages (Phase 1)
+
+#### Design Philosophy
+A unified communications hub that consolidates phone calls (including voicemails), SMS, and email into threaded conversations. Threads are resolved by contact identity — phone number and/or email — so all interactions with a single customer appear in one timeline regardless of channel.
+
+Designed to support an AI Assistant agent (Phase 2) that can autonomously respond to messages in configurable modes: Full Auto, Queue for Approval, or Out of Office.
+
+#### Schema Additions (5 models, 5 enums)
+- `MessageThread` — Groups all communications with a single contact across channels
+- `ThreadMessage` — Individual message within a thread, links to source (CallRecord/SmsLog/EmailLog)
+- `MessageReadStatus` — Per-employee tri-state tracking (UNREAD/READ/RESOLVED)
+- `DraftResponse` — AI-drafted responses awaiting employee approval (Phase 2)
+- `AssistantConfig` — Per-employee assistant mode and settings (Phase 2)
+- Enums: `MessageChannel`, `MessageDirection`, `ReadStatus`, `DraftStatus`, `AssistantMode`
+
+#### API Routes (6 endpoints)
+- `GET /api/messages/threads` — Thread listing with filters (phone/sms/email), search, read status
+- `GET /api/messages/threads/[id]` — Full thread detail with all messages
+- `PATCH /api/messages/threads/[id]/read` — Update read status (UNREAD → READ → RESOLVED)
+- `POST /api/messages/ingest` — Message ingestion: resolves/creates thread, creates ThreadMessage, updates metadata
+- `GET /api/messages/unread` — Unread/read/resolved counts for dashboard indicator
+- `POST /api/messages/seed` — Seed data generator (10 threads, 25+ messages across channels)
+
+#### Messages Inbox Page (`/dashboard/messages`)
+- Two-panel layout: thread list (left) + conversation detail (right)
+- Tri-state read status dots: 🔴 unread, 🟡 read, 🟢 resolved
+- Channel icons per message (Phone/SMS/Email)
+- Filter tabs: All | Phone | SMS | Email
+- Search by contact name or message content
+- 30-second polling for new messages
+- Voicemail transcription display
+- Resolve button, reply buttons (placeholder for Phase 2)
+
+#### Dashboard Indicator (`src/components/messages-indicator.tsx`)
+- Glass pill component on Command Center
+- Envelope icon with tri-state colored dot
+- AI Assistant icon (placeholder, "Coming Soon")
+- Click navigates to /dashboard/messages
+
+#### Spec Document
+- Full spec at `docs/MODULE-MESSAGES.md` covering all 3 phases, data model, UI components, assistant agent architecture, and API design
+
+### Files Added
+- `docs/MODULE-MESSAGES.md` — Full module specification
+- `src/app/api/messages/ingest/route.ts` — Message ingestion endpoint
+- `src/app/api/messages/seed/route.ts` — Seed data generator
+- `src/app/api/messages/threads/route.ts` — Thread listing
+- `src/app/api/messages/threads/[id]/route.ts` — Thread detail
+- `src/app/api/messages/threads/[id]/read/route.ts` — Read status updates
+- `src/app/api/messages/unread/route.ts` — Unread counts
+- `src/app/dashboard/messages/page.tsx` — Messages inbox page (614 lines)
+- `src/components/messages-indicator.tsx` — Dashboard indicator component
+
+### Files Modified
+- `prisma/schema.prisma` — +151 lines (5 models, 5 enums, reverse relations)
+- `src/lib/stripe.ts` — Lazy initialization
+- `src/lib/db.ts` — Lazy initialization
+- `src/lib/twilio-sms.ts` — TWILIO_SMS_NUMBER env var
+- `src/lib/voice/outbound.ts` — Added custom/sales-prospecting to intent map
+- `src/lib/voice/campaign-prompts.ts` — Added custom + sales-prospecting campaigns
+- `src/lib/voice/voice-server.ts` — Error handling + DB cleanup on crash
+- `src/lib/voice/session-manager.ts` — Mark DB record FAILED on missing API key
+- `src/app/api/operator/queue/route.ts` — Stale cleanup + removed campaign whitelist
+- `src/app/api/voice/status/route.ts` — Fallback SID lookup
+- `src/app/api/voice/call-records/route.ts` — Stale cleanup
+- `src/components/app-sidebar.tsx` — Added Messages nav item
+- `src/components/breadcrumb-nav.tsx` — Added messages mapping
+- `src/app/dashboard/page.tsx` — Added MessagesIndicator
+
+### Up Next
+- Phase 2: AI Assistant agent (full auto, queue for approval, out of office modes)
+- Phase 2: Reply from inbox (SMS/email compose, callback initiation)
+- Phase 2: Envelope hover-to-split interaction, assistant toggle
+- Wire ingest endpoint into existing webhooks (voice status, SMS, email)
+- Continue P0 roadmap: QuickBooks, Scheduling CRUD, Work Orders
+
+---
