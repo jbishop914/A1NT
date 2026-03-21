@@ -18,9 +18,9 @@ export function getTwilioClient(): twilio.Twilio {
   return twilioClient;
 }
 
-/** Default A1NT Twilio number */
+/** Default A1NT SMS number (toll-free) — falls back to voice number if not set */
 export function getPlatformSmsNumber(): string {
-  return process.env.TWILIO_PHONE_NUMBER || '+16463321206';
+  return process.env.TWILIO_SMS_NUMBER || process.env.TWILIO_PHONE_NUMBER || '+16463321206';
 }
 
 // ============================================================================
