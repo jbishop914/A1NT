@@ -100,6 +100,13 @@ export function handleMediaStream(
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) {
     console.error("[Voice] OPENAI_API_KEY not set — cannot start session");
+    // Mark the DB record as FAILED so it doesn't stay stuck as ACTIVE
+    if (config?.recordId) {
+      updateCallRecordById(config.recordId, {
+        status: "FAILED",
+        endedAt: new Date(),
+      } as any).catch(() => {});
+    }
     twilioWs.close(1008, "Server misconfigured");
     return;
   }

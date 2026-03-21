@@ -144,26 +144,47 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     }
   }
 
+  // ─── Helper: mark the DB record as FAILED if setup crashes ─────────
+  async function failRecord(reason: string) {
+    if (!recordId) return;
+    try {
+      const { db: database } = await import("../db");
+      await database.callRecord.update({
+        where: { id: recordId },
+        data: { status: "FAILED", endedAt: new Date() },
+      });
+      console.log(`[Voice] Marked record ${recordId} as FAILED (${reason})`);
+    } catch (e) {
+      console.warn(`[Voice] Could not mark record ${recordId} as FAILED:`, e);
+    }
+  }
+
   // Build config for outbound calls with campaign prompt
   if (direction === "outbound" && campaignContext) {
     import("./campaign-prompts").then(({ buildOutboundPrompt }) => {
-      const prompt = buildOutboundPrompt(campaignContext);
-      const config: Parameters<typeof handleMediaStream>[1] = {
-        systemPrompt: prompt,
-        direction: "outbound",
-        campaignType: campaignType ?? undefined,
-        recordId: recordId ?? undefined,
-      };
-      console.log(`[Voice] Using outbound prompt for campaign: ${campaignType}`);
-      handleMediaStream(ws, config);
+      try {
+        const prompt = buildOutboundPrompt(campaignContext);
+        const config: Parameters<typeof handleMediaStream>[1] = {
+          systemPrompt: prompt,
+          direction: "outbound",
+          campaignType: campaignType ?? undefined,
+          recordId: recordId ?? undefined,
+        };
+        console.log(`[Voice] Using outbound prompt for campaign: ${campaignType}`);
+        handleMediaStream(ws, config);
+      } catch (promptErr) {
+        console.error("[Voice] Failed to build outbound prompt:", promptErr);
+        // Still start the session with fallback prompt
+        handleMediaStream(ws, {
+          direction: "outbound",
+          campaignType: campaignType ?? undefined,
+          recordId: recordId ?? undefined,
+        });
+      }
     }).catch((err) => {
-      console.error("[Voice] Failed to load campaign-prompts:", err);
-      // Fallback: start session without campaign context
-      handleMediaStream(ws, {
-        direction: "outbound",
-        campaignType: campaignType ?? undefined,
-        recordId: recordId ?? undefined,
-      });
+      console.error("[Voice] Failed to load campaign-prompts module:", err);
+      failRecord("campaign-prompts module load failed");
+      ws.close(1011, "Server error");
     });
   } else {
     // Inbound call — no campaign context needed
