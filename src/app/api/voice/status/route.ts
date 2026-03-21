@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { ingestMessage } from "@/lib/messages/ingest";
 
 /** Map Twilio call status to our CallStatus enum */
 const STATUS_MAP: Record<string, "ACTIVE" | "COMPLETED" | "MISSED" | "FAILED"> = {
@@ -119,6 +120,38 @@ export async function POST(request: NextRequest) {
           } catch (queueErr) {
             console.log(`[Voice] Could not update OutboundQueueItem for call ${callSid}:`, queueErr);
           }
+        }
+
+        // ── Ingest into Unified Messages ──
+        try {
+          const callDuration = duration ? parseInt(duration, 10) : 0;
+          const summaryText = updatedRecord.summary || "Call completed";
+          const transcriptData = updatedRecord.transcript as
+            | Array<{ speaker: string; text: string }>
+            | null;
+          const formattedTranscript = transcriptData
+            ? transcriptData
+                .map((t) => `${t.speaker}: ${t.text}`)
+                .join("\n")
+            : undefined;
+
+          await ingestMessage({
+            channel: "PHONE",
+            direction: updatedRecord.direction as "INBOUND" | "OUTBOUND",
+            contactName: updatedRecord.callerName || updatedRecord.callerNumber,
+            contactPhone: updatedRecord.callerNumber,
+            body: summaryText,
+            preview: summaryText.substring(0, 120),
+            sourceId: updatedRecord.id,
+            sourceType: "CallRecord",
+            hasVoicemail:
+              dbStatus === "MISSED" && callDuration > 10,
+            transcription: formattedTranscript,
+            organizationId: updatedRecord.organizationId,
+          });
+          console.log(`[Voice] Ingested call ${callSid} into Messages`);
+        } catch (ingestErr) {
+          console.log(`[Voice] Could not ingest call into Messages:`, ingestErr);
         }
       } catch (err) {
         // Record might not exist yet (race condition) or might have been created

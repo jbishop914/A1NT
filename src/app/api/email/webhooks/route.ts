@@ -1,6 +1,7 @@
 // Resend Webhook Handler — Delivery tracking (delivered, opened, bounced, complained)
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ingestMessage } from '@/lib/messages/ingest';
 
 // Resend webhook event types we handle
 type ResendWebhookEvent = {
@@ -69,6 +70,33 @@ export async function POST(request: NextRequest) {
             where: { id: emailLog.campaignId },
             data: { totalDelivered: { increment: 1 } },
           });
+        }
+        // Ingest into Unified Messages
+        try {
+          const toAddress = data.to?.[0] || '';
+          let contactName = toAddress;
+          const client = await db.client.findFirst({
+            where: {
+              organizationId: emailLog.organizationId,
+              email: toAddress,
+            },
+            select: { name: true },
+          });
+          if (client) contactName = client.name;
+
+          await ingestMessage({
+            channel: 'EMAIL',
+            direction: 'OUTBOUND',
+            contactEmail: toAddress,
+            contactName,
+            body: data.subject || emailLog.subject || 'No subject',
+            subject: data.subject || emailLog.subject || undefined,
+            sourceId: emailLog.id,
+            sourceType: 'EmailLog',
+            organizationId: emailLog.organizationId,
+          });
+        } catch (ingestErr) {
+          console.log('[Email Webhook] Could not ingest into Messages:', ingestErr);
         }
         break;
 

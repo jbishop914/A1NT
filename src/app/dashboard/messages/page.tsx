@@ -15,25 +15,18 @@ import {
   Mail,
   Search,
   CheckCircle2,
-  Circle,
   ArrowDownLeft,
   ArrowUpRight,
   Voicemail,
   Loader2,
   RefreshCw,
   Send,
-  Bot,
   Inbox,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Textarea } from "@/components/ui/textarea";
 
 const ORG_ID = process.env.NEXT_PUBLIC_A1NT_ORG_ID || "demo-org";
 const POLL_INTERVAL = 30_000; // 30s
@@ -303,18 +296,55 @@ function ThreadDetailPanel({
   thread,
   loading,
   onMarkResolved,
+  onReply,
 }: {
   thread: ThreadDetail | null;
   loading: boolean;
   onMarkResolved: () => void;
+  onReply: (channel: "SMS" | "EMAIL", body: string, subject?: string) => Promise<void>;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [replyBody, setReplyBody] = useState("");
+  const [replySubject, setReplySubject] = useState("");
+  const [replyChannel, setReplyChannel] = useState<"SMS" | "EMAIL">("SMS");
+  const [sending, setSending] = useState(false);
+
+  // Determine available reply channels
+  const canSms = !!thread?.contactPhone;
+  const canEmail = !!thread?.contactEmail;
+
+  // Reset reply state when thread changes
+  useEffect(() => {
+    setReplyBody("");
+    setReplySubject("");
+    if (thread) {
+      // Default to SMS if available, otherwise EMAIL
+      if (thread.contactPhone) setReplyChannel("SMS");
+      else if (thread.contactEmail) setReplyChannel("EMAIL");
+    }
+  }, [thread?.id]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [thread?.messages]);
+
+  const handleSend = async () => {
+    if (!replyBody.trim() || sending) return;
+    setSending(true);
+    try {
+      await onReply(
+        replyChannel,
+        replyBody.trim(),
+        replyChannel === "EMAIL" ? replySubject || undefined : undefined
+      );
+      setReplyBody("");
+      setReplySubject("");
+    } finally {
+      setSending(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -372,26 +402,19 @@ function ThreadDetailPanel({
             <CheckCircle2 className="w-3 h-3 mr-1" />
             Resolve
           </Button>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-[11px] h-7 border-white/10 text-white/40"
-                    disabled
-                  />
-                }
-              >
-                <Send className="w-3 h-3 mr-1" />
-                Reply
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">Reply coming in Phase 2</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          {thread.contactPhone && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-[11px] h-7 border-white/10 text-white/50 hover:text-white hover:border-white/20"
+              onClick={() =>
+                window.open(`/dashboard/operator?phone=${encodeURIComponent(thread.contactPhone!)}`, "_blank")
+              }
+            >
+              <Phone className="w-3 h-3 mr-1" />
+              Call Back
+            </Button>
+          )}
         </div>
       </div>
 
@@ -475,26 +498,78 @@ function ThreadDetailPanel({
         ))}
       </div>
 
-      {/* Reply bar (disabled for Phase 1) */}
-      <div className="px-4 py-3 border-t border-white/[0.06]">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <div className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 opacity-50 cursor-not-allowed" />
+      {/* Reply compose bar */}
+      {(canSms || canEmail) && (
+        <div className="px-4 py-3 border-t border-white/[0.06] space-y-2">
+          {/* Channel selector */}
+          <Tabs value={replyChannel} onValueChange={(v) => setReplyChannel(v as "SMS" | "EMAIL")}>
+            <TabsList className="bg-white/[0.04] h-7">
+              {canSms && (
+                <TabsTrigger value="SMS" className="text-[10px] data-[state=active]:bg-white/10">
+                  <MessageSquare className="w-3 h-3 mr-1" />
+                  SMS
+                </TabsTrigger>
+              )}
+              {canEmail && (
+                <TabsTrigger value="EMAIL" className="text-[10px] data-[state=active]:bg-white/10">
+                  <Mail className="w-3 h-3 mr-1" />
+                  Email
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </Tabs>
+
+          {/* Subject field for email */}
+          {replyChannel === "EMAIL" && (
+            <input
+              type="text"
+              placeholder="Subject..."
+              value={replySubject}
+              onChange={(e) => setReplySubject(e.target.value)}
+              className="w-full bg-white/[0.05] border border-white/[0.08] rounded-md px-3 py-1.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-white/20 transition-colors"
+            />
+          )}
+
+          {/* Message body + send */}
+          <div className="flex gap-2 items-end">
+            <Textarea
+              placeholder={
+                replyChannel === "SMS"
+                  ? `Reply via SMS to ${thread.contactPhone}...`
+                  : `Reply via Email to ${thread.contactEmail}...`
               }
+              value={replyBody}
+              onChange={(e) => setReplyBody(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              className="flex-1 min-h-[40px] max-h-[120px] bg-white/[0.05] border-white/[0.08] text-xs text-white placeholder:text-white/30 focus-visible:ring-white/10 focus-visible:border-white/20 resize-none"
+              rows={2}
+            />
+            <Button
+              size="sm"
+              className="h-9 px-3 bg-blue-600 hover:bg-blue-500 text-white text-xs shrink-0"
+              disabled={!replyBody.trim() || sending}
+              onClick={handleSend}
             >
-              <Circle className="w-3.5 h-3.5 text-white/20" />
-              <span className="text-xs text-white/20">
-                Reply functionality coming in Phase 2...
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">Reply, draft, and AI-suggested responses coming in Phase 2</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+              {sending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <>
+                  <Send className="w-3.5 h-3.5 mr-1" />
+                  Send
+                </>
+              )}
+            </Button>
+          </div>
+          <p className="text-[9px] text-white/20">
+            {replyChannel === "SMS" ? "160 char/segment" : "Press Cmd+Enter to send"}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -581,6 +656,30 @@ export default function MessagesPage() {
     );
   };
 
+  const handleReply = async (channel: "SMS" | "EMAIL", body: string, subject?: string) => {
+    if (!activeThreadId) return;
+    const res = await fetch("/api/messages/reply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        threadId: activeThreadId,
+        channel,
+        body,
+        subject,
+        organizationId: ORG_ID,
+        employeeId: "demo-employee",
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Send failed" }));
+      throw new Error(err.error || "Send failed");
+    }
+    // Refresh thread to show the new outbound message
+    await fetchThreadDetail(activeThreadId);
+    // Refresh thread list to update previews
+    await fetchThreads();
+  };
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)] bg-black/20 rounded-lg border border-white/[0.06] overflow-hidden">
       {/* Left panel: Thread list */}
@@ -607,6 +706,7 @@ export default function MessagesPage() {
           thread={activeThread}
           loading={loadingDetail}
           onMarkResolved={handleMarkResolved}
+          onReply={handleReply}
         />
       </div>
     </div>

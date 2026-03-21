@@ -1,6 +1,7 @@
 // SMS Sending API — Send transactional and ad-hoc text messages
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ingestMessage } from '@/lib/messages/ingest';
 import {
   sendSms,
   getPlatformSmsNumber,
@@ -93,6 +94,33 @@ export async function POST(request: NextRequest) {
           segmentCount: result.segmentCount,
         },
       });
+
+      // Ingest outbound SMS into Unified Messages
+      try {
+        let contactName = normalizedTo;
+        const client = await db.client.findFirst({
+          where: {
+            organizationId,
+            phone: { contains: normalizedTo.replace('+1', '').replace('+', '') },
+          },
+          select: { name: true },
+        });
+        if (client) contactName = client.name;
+
+        await ingestMessage({
+          channel: 'SMS',
+          direction: 'OUTBOUND',
+          contactName,
+          contactPhone: normalizedTo,
+          body: smsBody,
+          preview: smsBody.substring(0, 120),
+          sourceId: updated.id,
+          sourceType: 'SmsLog',
+          organizationId,
+        });
+      } catch (ingestErr) {
+        console.log('[SMS Send] Could not ingest into Messages:', ingestErr);
+      }
 
       return NextResponse.json({
         success: true,

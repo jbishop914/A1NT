@@ -1,6 +1,7 @@
 // Email Sending API — Send transactional, notification, and ad-hoc emails
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ingestMessage } from '@/lib/messages/ingest';
 import { sendEmail, formatFromAddress, getPlatformFromAddress } from '@/lib/resend';
 import type { EmailType } from '@/generated/prisma/client';
 
@@ -116,6 +117,36 @@ export async function POST(request: NextRequest) {
           sentAt: new Date(),
         },
       });
+
+      // Ingest outbound email into Unified Messages
+      try {
+        const toAddress = Array.isArray(to) ? to[0] : to;
+        let contactName = toAddress;
+        const client = await db.client.findFirst({
+          where: { organizationId, email: toAddress },
+          select: { name: true },
+        });
+        if (client) contactName = client.name;
+
+        // Build body: subject + first 200 chars of text/html stripped
+        const plainText = resolvedText || (resolvedHtml || '').replace(/<[^>]*>/g, '');
+        const emailBody = `${resolvedSubject}${plainText ? '\n\n' + plainText.substring(0, 200) : ''}`;
+
+        await ingestMessage({
+          channel: 'EMAIL',
+          direction: 'OUTBOUND',
+          contactEmail: toAddress,
+          contactName,
+          body: emailBody,
+          subject: resolvedSubject,
+          preview: resolvedSubject,
+          sourceId: updated.id,
+          sourceType: 'EmailLog',
+          organizationId,
+        });
+      } catch (ingestErr) {
+        console.log('[Email Send] Could not ingest into Messages:', ingestErr);
+      }
 
       return NextResponse.json({
         success: true,

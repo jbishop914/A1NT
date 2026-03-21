@@ -2,7 +2,10 @@
 // Twilio POSTs to this URL when message status changes (sent → delivered → failed)
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ingestMessage } from '@/lib/messages/ingest';
 import twilio from 'twilio';
+
+const ORG_ID = process.env.A1NT_ORG_ID ?? 'demo-org';
 
 // POST /api/sms/webhooks — Called by Twilio on delivery status changes
 export async function POST(request: NextRequest) {
@@ -105,6 +108,35 @@ export async function POST(request: NextRequest) {
           where: { id: smsLog.campaignId },
           data: { totalSmsFailed: { increment: 1 } },
         });
+      }
+    }
+
+    // Ingest delivered outbound SMS into Unified Messages
+    if (dbStatus === 'DELIVERED') {
+      try {
+        let contactName = smsLog.toNumber;
+        const client = await db.client.findFirst({
+          where: {
+            organizationId: smsLog.organizationId || ORG_ID,
+            phone: { contains: smsLog.toNumber.replace('+1', '').replace('+', '') },
+          },
+          select: { name: true },
+        });
+        if (client) contactName = client.name;
+
+        await ingestMessage({
+          channel: 'SMS',
+          direction: 'OUTBOUND',
+          contactName,
+          contactPhone: smsLog.toNumber,
+          body: smsLog.body,
+          preview: smsLog.body.substring(0, 120),
+          sourceId: smsLog.id,
+          sourceType: 'SmsLog',
+          organizationId: smsLog.organizationId || ORG_ID,
+        });
+      } catch (ingestErr) {
+        console.log('[SMS Webhook] Could not ingest into Messages:', ingestErr);
       }
     }
 

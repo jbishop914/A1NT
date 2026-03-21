@@ -23,132 +23,21 @@
    ──────────────────────────────────────────────────────────────────────── */
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { ingestMessage } from "@/lib/messages/ingest";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const {
-      channel,
-      direction,
-      contactName,
-      contactPhone,
-      contactEmail,
-      body: messageBody,
-      preview,
-      subject,
-      sourceId,
-      sourceType,
-      hasVoicemail,
-      transcription,
-      organizationId,
-    } = body;
 
-    if (!channel || !direction || !contactName || !messageBody || !organizationId) {
-      return NextResponse.json(
-        { error: "channel, direction, contactName, body, and organizationId are required" },
-        { status: 400 }
-      );
-    }
+    const { threadId, messageId } = await ingestMessage(body);
 
-    // Try to find existing thread by contact phone or email within the org
-    let thread = null;
-    if (contactPhone) {
-      thread = await (db.messageThread as any).findFirst({
-        where: { organizationId, contactPhone },
-        orderBy: { lastMessageAt: "desc" },
-      });
-    }
-    if (!thread && contactEmail) {
-      thread = await (db.messageThread as any).findFirst({
-        where: { organizationId, contactEmail },
-        orderBy: { lastMessageAt: "desc" },
-      });
-    }
-
-    const messagePreview = preview || messageBody.substring(0, 120);
-    const now = new Date();
-
-    if (thread) {
-      // Update existing thread
-      thread = await (db.messageThread as any).update({
-        where: { id: thread.id },
-        data: {
-          preview: messagePreview,
-          lastMessageAt: now,
-          messageCount: { increment: 1 },
-          subject: subject || thread.subject,
-        },
-      });
-    } else {
-      // Create new thread
-      thread = await (db.messageThread as any).create({
-        data: {
-          organizationId,
-          contactName,
-          contactPhone: contactPhone || null,
-          contactEmail: contactEmail || null,
-          channel,
-          subject: subject || null,
-          preview: messagePreview,
-          lastMessageAt: now,
-          messageCount: 1,
-        },
-      });
-    }
-
-    // Create the thread message
-    const threadMessage = await (db.threadMessage as any).create({
-      data: {
-        threadId: thread.id,
-        channel,
-        direction,
-        body: messageBody,
-        preview: messagePreview,
-        subject: subject || null,
-        sourceId: sourceId || null,
-        sourceType: sourceType || null,
-        hasVoicemail: hasVoicemail || false,
-        transcription: transcription || null,
-      },
-    });
-
-    // Set all employees in the org to UNREAD for this thread
-    const employees = await (db.employee as any).findMany({
-      where: { organizationId, isActive: true },
-      select: { id: true },
-    });
-
-    if (employees.length > 0) {
-      await Promise.all(
-        employees.map((emp: { id: string }) =>
-          (db.messageReadStatus as any).upsert({
-            where: {
-              threadId_employeeId: {
-                threadId: thread.id,
-                employeeId: emp.id,
-              },
-            },
-            update: { status: "UNREAD" },
-            create: {
-              threadId: thread.id,
-              employeeId: emp.id,
-              status: "UNREAD",
-            },
-          })
-        )
-      );
-    }
-
-    return NextResponse.json({
-      thread,
-      message: threadMessage,
-    });
-  } catch (error) {
+    return NextResponse.json({ thread: { id: threadId }, message: { id: messageId } });
+  } catch (error: any) {
     console.error("[messages/ingest] Error:", error);
+    const status = error.message?.includes("required") ? 400 : 500;
     return NextResponse.json(
-      { error: "Failed to ingest message" },
-      { status: 500 }
+      { error: error.message || "Failed to ingest message" },
+      { status }
     );
   }
 }

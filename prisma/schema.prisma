@@ -1504,6 +1504,7 @@ model SmsLog {
 
   twilioMessageSid String?         // Twilio's message SID for tracking
   status           SmsLogStatus    @default(QUEUED)
+  direction        MessageDirection @default(OUTBOUND) // INBOUND for customer-sent, OUTBOUND for org-sent
 
   // Sender / recipient
   fromNumber       String          // Twilio phone number
