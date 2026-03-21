@@ -24,6 +24,7 @@ import {
   Activity,
   MapPin,
 } from "lucide-react";
+import { MessagesIndicator } from "@/components/messages-indicator";
 
 // ─── Sample data ────────────────────────────────────────────────
 
@@ -140,9 +141,12 @@ export default function CommandCenter() {
 
             {isMapMode && <MapSearch map={mapInstance} />}
 
-            <div className="ml-auto flex items-center gap-1.5 bg-black/50 backdrop-blur-xl rounded-lg border border-white/[0.08] px-3 py-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span className="text-[10px] font-mono text-white/60">ALL SYSTEMS ONLINE</span>
+            <div className="ml-auto flex items-center gap-2">
+              <MessagesIndicator />
+              <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-xl rounded-lg border border-white/[0.08] px-3 py-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span className="text-[10px] font-mono text-white/60">ALL SYSTEMS ONLINE</span>
+              </div>
             </div>
           </div>
 

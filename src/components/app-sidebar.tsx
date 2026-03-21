@@ -32,6 +32,7 @@ import {
   Headset,
   CreditCard,
   Mail,
+  MessageSquare,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -92,6 +93,19 @@ const navSections: NavSection[] = [
           { label: "All Clients", href: "/dashboard/clients" },
           { label: "New Lead", href: "/dashboard/clients#new" },
           { label: "Run Analysis", href: "/dashboard/clients#analysis" },
+        ],
+      },
+      {
+        label: "Messages",
+        href: "/dashboard/messages",
+        icon: MessageSquare,
+        notifications: "warning",
+        notificationCount: 4,
+        quickLinks: [
+          { label: "Inbox", href: "/dashboard/messages" },
+          { label: "Phone", href: "/dashboard/messages#phone" },
+          { label: "SMS", href: "/dashboard/messages#sms" },
+          { label: "Email", href: "/dashboard/messages#email" },
         ],
       },
     ],
