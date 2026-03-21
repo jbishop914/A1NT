@@ -85,6 +85,21 @@ export async function GET(request: NextRequest) {
     // For now, get all orgs' records. In production, resolve org from auth session.
     const orgId = process.env.A1NT_ORG_ID;
 
+    // Auto-clean stale ACTIVE records (calls that ended without a status callback).
+    // Any call marked ACTIVE for over 30 minutes is almost certainly done.
+    const staleThreshold = new Date(Date.now() - 30 * 60 * 1000);
+    await db.callRecord.updateMany({
+      where: {
+        status: "ACTIVE",
+        startedAt: { lt: staleThreshold },
+        ...(orgId ? { organizationId: orgId } : {}),
+      },
+      data: {
+        status: "COMPLETED",
+        endedAt: new Date(),
+      },
+    });
+
     const where: Record<string, unknown> = {};
     if (orgId) where.organizationId = orgId;
     if (status) where.status = status;
