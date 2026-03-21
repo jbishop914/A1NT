@@ -86,8 +86,9 @@ export async function GET(request: NextRequest) {
     const orgId = process.env.A1NT_ORG_ID;
 
     // Auto-clean stale ACTIVE records (calls that ended without a status callback).
-    // Any call marked ACTIVE for over 30 minutes is almost certainly done.
-    const staleThreshold = new Date(Date.now() - 30 * 60 * 1000);
+    // 4-hour threshold — generous enough to never kill a real call, but catches
+    // orphaned records from missed webhooks or crashed sessions.
+    const staleThreshold = new Date(Date.now() - 4 * 60 * 60 * 1000);
     await db.callRecord.updateMany({
       where: {
         status: "ACTIVE",

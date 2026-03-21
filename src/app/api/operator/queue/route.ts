@@ -114,9 +114,9 @@ export async function GET() {
     };
 
     // Get active outbound CallRecords for live monitor.
-    // Also auto-clean stale records: if a call has been "ACTIVE" for over
-    // 60 minutes, it almost certainly ended without a status callback.
-    const staleThreshold = new Date(Date.now() - 60 * 60 * 1000);
+    // Auto-clean truly orphaned records: 4-hour threshold is generous enough
+    // to never kill a real call, but catches records stuck from missed webhooks.
+    const staleThreshold = new Date(Date.now() - 4 * 60 * 60 * 1000);
 
     await db.callRecord.updateMany({
       where: {
