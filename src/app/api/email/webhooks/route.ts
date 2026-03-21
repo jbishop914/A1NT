@@ -1,7 +1,8 @@
-// Resend Webhook Handler — Delivery tracking (delivered, opened, bounced, complained)
+// Resend Webhook Handler — Delivery tracking + Inbound email receiving
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ingestMessage } from '@/lib/messages/ingest';
+import { getResendClient } from '@/lib/resend';
 
 // Resend webhook event types we handle
 type ResendWebhookEvent = {
@@ -13,6 +14,17 @@ type ResendWebhookEvent = {
     to: string[];
     subject: string;
     created_at: string;
+    // Inbound-specific fields
+    cc?: string[];
+    bcc?: string[];
+    reply_to?: string[];
+    message_id?: string;
+    attachments?: Array<{
+      id: string;
+      filename: string;
+      content_type: string;
+    }>;
+    // Outbound-specific fields
     bounce?: {
       message: string;
       subType: string;
@@ -28,12 +40,114 @@ type ResendWebhookEvent = {
   };
 };
 
-// POST /api/email/webhooks — Resend sends delivery events here
+// POST /api/email/webhooks — Resend sends delivery events + inbound emails here
 export async function POST(request: NextRequest) {
   try {
     const event: ResendWebhookEvent = await request.json();
     const { type, data } = event;
     const resendEmailId = data.email_id;
+
+    // ─── Handle inbound emails (email.received) ──────────────────────
+    // This is a completely separate flow from outbound delivery tracking.
+    // Inbound emails don't have an existing EmailLog — they're new messages
+    // from external senders arriving at our domain.
+    if (type === 'email.received') {
+      console.log(`[Email] Inbound email received: ${resendEmailId} from ${data.from} — ${data.subject}`);
+
+      // Fetch the full email content from Resend Receiving API
+      // (Webhook only includes metadata, not the body)
+      let emailBody = '';
+      let emailText = '';
+      try {
+        const resend = getResendClient();
+        const { data: fullEmail } = await (resend.emails as any).receiving.get(resendEmailId);
+        if (fullEmail) {
+          emailText = fullEmail.text || '';
+          emailBody = fullEmail.text || fullEmail.html || '';
+          // Strip HTML tags for plain text preview if only HTML available
+          if (!fullEmail.text && fullEmail.html) {
+            emailBody = fullEmail.html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+          }
+        }
+      } catch (fetchErr) {
+        console.warn(`[Email] Could not fetch full email content for ${resendEmailId}:`, fetchErr);
+        emailBody = `[Email received: ${data.subject}]`;
+      }
+
+      // Parse sender info — Resend "from" format is "Name <email@example.com>" or just "email@example.com"
+      const fromMatch = data.from.match(/^(.+?)\s*<(.+?)>$/);
+      const senderName = fromMatch ? fromMatch[1].trim().replace(/^"|"$/g, '') : data.from;
+      const senderEmail = fromMatch ? fromMatch[2] : data.from;
+
+      // Determine org — for now use env default. In production, resolve from the "to" address.
+      const orgId = process.env.A1NT_ORG_ID ?? 'demo-org';
+
+      // Try to resolve contact name from CRM
+      let contactName = senderName;
+      try {
+        const client = await db.client.findFirst({
+          where: { organizationId: orgId, email: senderEmail },
+          select: { name: true },
+        });
+        if (client) contactName = client.name;
+      } catch { /* ignore */ }
+
+      // Create an EmailLog for the inbound email
+      const emailLog = await db.emailLog.create({
+        data: {
+          organizationId: orgId,
+          type: 'TRANSACTIONAL' as any,
+          status: 'DELIVERED' as any,
+          fromAddress: data.from,
+          toAddresses: data.to,
+          subject: data.subject,
+          resendEmailId,
+          sentAt: new Date(data.created_at),
+          deliveredAt: new Date(data.created_at),
+        },
+      });
+
+      // Ingest into Messages thread
+      try {
+        await ingestMessage({
+          channel: 'EMAIL',
+          direction: 'INBOUND',
+          contactName,
+          contactEmail: senderEmail,
+          body: emailBody || `[Email: ${data.subject}]`,
+          preview: (emailBody || data.subject).substring(0, 120),
+          subject: data.subject,
+          sourceId: emailLog.id,
+          sourceType: 'EmailLog',
+          organizationId: orgId,
+        });
+        console.log(`[Email] Inbound email ingested into Messages thread: ${senderEmail} — ${data.subject}`);
+      } catch (ingestErr) {
+        console.error('[Email] Failed to ingest inbound email:', ingestErr);
+      }
+
+      // Log activity
+      await db.activityLog.create({
+        data: {
+          organizationId: orgId,
+          action: 'email.received',
+          entityType: 'EmailLog',
+          entityId: emailLog.id,
+          metadata: {
+            resendEmailId,
+            from: data.from,
+            to: data.to,
+            subject: data.subject,
+            attachmentCount: data.attachments?.length ?? 0,
+          },
+        },
+      });
+
+      return NextResponse.json({ received: true });
+    }
+
+    // ─── Handle outbound delivery events ──────────────────────────────
+    // Everything below is for tracking emails WE sent (delivery, opens, bounces, etc.)
 
     if (!resendEmailId) {
       return NextResponse.json({ received: true });
