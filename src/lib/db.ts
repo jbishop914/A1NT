@@ -34,6 +34,14 @@ function createPrismaClient(): PrismaClient {
   });
 }
 
-export const db = globalForPrisma.prisma ?? createPrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+// Lazy-initialized via Proxy so the client is only created at first actual
+// use, not at module-evaluation / build time (which would crash if DATABASE_URL
+// is unavailable during Next.js static analysis).
+export const db: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_, prop) {
+    if (!globalForPrisma.prisma) {
+      globalForPrisma.prisma = createPrismaClient();
+    }
+    return (globalForPrisma.prisma as any)[prop];
+  },
+});

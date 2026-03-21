@@ -12,12 +12,27 @@
 
 import Stripe from 'stripe';
 
-// Platform Stripe instance (A1NT's own keys)
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2025-03-31.basil' as any, // Latest API version
-});
+// Platform Stripe instance (A1NT's own keys) — lazy-initialized to avoid
+// build-time errors when STRIPE_SECRET_KEY isn't available during static analysis.
+let _stripe: Stripe | null = null;
 
-export { stripe };
+export function getStripe(): Stripe {
+  if (!_stripe) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) throw new Error('STRIPE_SECRET_KEY environment variable is not set');
+    _stripe = new Stripe(key, {
+      apiVersion: '2025-03-31.basil' as any,
+    });
+  }
+  return _stripe;
+}
+
+/** @deprecated Use getStripe() instead — kept for backward compatibility */
+export const stripe = new Proxy({} as Stripe, {
+  get(_, prop) {
+    return (getStripe() as any)[prop];
+  },
+});
 
 // ============================================================================
 // APPLICATION FEE CALCULATION
